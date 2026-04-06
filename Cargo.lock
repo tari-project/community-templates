@@ -1584,7 +1584,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
- "tari_bor",
  "tari_crypto",
  "tari_engine_types",
  "tari_ootle_template_metadata",

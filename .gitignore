@@ -28,3 +28,4 @@ config.toml
 *.swo
 *~
 .DS_Store
+web/.vite/

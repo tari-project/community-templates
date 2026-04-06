@@ -1,0 +1,187 @@
+@font-face {
+  font-family: "Druk";
+  src: url("/fonts/DrukLCG-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Druk";
+  src: url("/fonts/DrukLCG-Heavy.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --color-cloud: #040723;
+  --color-ink: #dee0f8;
+  --color-purple: #957de8;
+  --color-green: #c8e800;
+  --color-purple-dim: rgba(129, 88, 245, 0.15);
+  --text-muted: #64748b;
+
+  --grad-accent: linear-gradient(
+    145deg,
+    rgba(78, 33, 203, 0.1) -10%,
+    rgba(205, 236, 15, 0.035) 125%
+  );
+
+  --font-heading: "Druk", sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas,
+    "Courier New", monospace;
+
+  --radius: 8px;
+  --max-width: 1200px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-cloud);
+  color: var(--color-ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+h1 {
+  font-size: 3.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--color-ink) 0%, var(--color-purple) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+a {
+  color: var(--color-purple);
+  text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+code {
+  font-family: var(--font-mono);
+  background: var(--grad-accent);
+  color: var(--color-purple);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--color-purple-dim);
+  font-size: 0.875em;
+}
+
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+
+  &--purple {
+    background: var(--color-purple-dim);
+    color: var(--color-purple);
+  }
+
+  &--green {
+    background: rgba(200, 232, 0, 0.15);
+    color: var(--color-green);
+  }
+
+  &--muted {
+    background: rgba(100, 116, 139, 0.15);
+    color: var(--text-muted);
+  }
+}
+
+button,
+.btn {
+  font-family: var(--font-body);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: opacity 0.2s;
+
+  &:hover {
+    opacity: 0.85;
+  }
+}
+
+.btn-primary {
+  background: var(--color-purple);
+  color: #fff;
+}
+
+.btn-danger {
+  background: #e53e3e;
+  color: #fff;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--color-purple-dim);
+  color: var(--color-ink);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="search"],
+select {
+  font-family: var(--font-body);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-purple-dim);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  color: var(--color-ink);
+  outline: none;
+  width: 100%;
+
+  &:focus {
+    border-color: var(--color-purple);
+  }
+
+  &::placeholder {
+    color: var(--text-muted);
+  }
+}

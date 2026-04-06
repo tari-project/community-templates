@@ -1,5 +1,5 @@
 # Stage 1: Build the Rust backend
-FROM rust:1.87 AS rust-builder
+FROM rust:1.94 AS rust-builder
 WORKDIR /build
 
 # Copy manifests to cache dependencies
@@ -13,8 +13,6 @@ RUN mkdir -p server/src && echo "fn main() {}" > server/src/main.rs \
 # Copy source and build final binary
 COPY server/src/ server/src/
 COPY migrations/ migrations/
-COPY .sqlx/ .sqlx/
-ENV SQLX_OFFLINE=true
 RUN cargo build --release -p ootle-community-templates
 
 # Stage 2: Build the frontend

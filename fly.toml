@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for app-broken-glitter-7819 on 2026-04-06T10:27:08Z
+# fly.toml app configuration file generated for app-restless-dew-1585 on 2026-04-06T10:31:05Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'app-broken-glitter-7819'
+app = 'app-restless-dew-1585'
 primary_region = 'iad'
 
 [build]

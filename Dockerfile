@@ -1,9 +1,19 @@
 # Stage 1: Build the Rust backend
 FROM rust:1.87 AS rust-builder
 WORKDIR /build
+
+# Copy manifests to cache dependencies
 COPY Cargo.toml Cargo.lock ./
-COPY server/ server/
+COPY server/Cargo.toml server/Cargo.toml
+
+# Build dependencies only (dummy main)
+RUN mkdir -p server/src && echo "fn main() {}" > server/src/main.rs \
+    && cargo build --release -p ootle-community-templates
+
+# Copy source and build final binary
+COPY server/src/ server/src/
 COPY migrations/ migrations/
+COPY .sqlx/ .sqlx/
 ENV SQLX_OFFLINE=true
 RUN cargo build --release -p ootle-community-templates
 

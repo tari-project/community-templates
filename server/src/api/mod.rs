@@ -6,9 +6,9 @@ pub mod templates;
 
 use std::sync::Arc;
 
-use axum::{middleware, Router};
+use axum::{http::Method, middleware, Router};
 use sqlx::PgPool;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 
 pub struct AppState {
     pub pool: PgPool,
@@ -20,8 +20,15 @@ pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
         .merge(templates::routes())
         .merge(search::routes())
-        .merge(metadata::routes())
         .merge(auth::login_routes());
+
+    // Metadata submission needs CORS for cross-origin CLI/browser submissions
+    let metadata_routes = Router::new().merge(metadata::routes()).layer(
+        CorsLayer::new()
+            .allow_methods([Method::POST])
+            .allow_origin(Any)
+            .allow_headers(Any),
+    );
 
     let admin = Router::new()
         .merge(admin::routes())
@@ -32,7 +39,7 @@ pub fn router(state: Arc<AppState>) -> Router {
 
     Router::new()
         .nest("/api", public)
+        .nest("/api", metadata_routes)
         .nest("/api/admin", admin)
-        .layer(CorsLayer::permissive())
         .with_state(state)
 }

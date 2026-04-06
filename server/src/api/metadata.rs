@@ -183,9 +183,10 @@ async fn store_metadata(
     metadata: &TemplateMetadata,
     cbor_bytes: &[u8],
 ) -> Result<SubmitMetadataResponse, AppError> {
-    let extra = serde_json::to_value(&metadata.extra).unwrap_or_default();
+    let extra = serde_json::to_value(&metadata.extra)
+        .map_err(|e| AppError::internal(format!("Failed to serialize extra metadata: {e}")))?;
     let new_metadata = db::metadata::NewMetadata {
-        template_address: addr.clone(),
+        template_address: *addr,
         name: metadata.name.clone(),
         version: metadata.version.clone(),
         description: metadata.description.clone(),

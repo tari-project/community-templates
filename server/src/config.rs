@@ -53,7 +53,7 @@ pub struct Cli {
     pub network: Option<Network>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]
     pub network: Network,
@@ -97,18 +97,6 @@ pub struct AdminConfig {
     pub initial_username: String,
     #[serde(default = "default_admin_password")]
     pub initial_password: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            network: Network::default(),
-            server: ServerConfig::default(),
-            database: DatabaseConfig::default(),
-            indexer: IndexerConfig::default(),
-            admin: AdminConfig::default(),
-        }
-    }
 }
 
 impl Default for ServerConfig {

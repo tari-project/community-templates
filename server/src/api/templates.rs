@@ -50,13 +50,11 @@ pub struct MetadataResponse {
 async fn get_featured(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<TemplateResponse>>, AppError> {
-    let templates = db::templates::list_featured(&state.pool).await?;
-    let mut results = Vec::with_capacity(templates.len());
-    for t in templates {
-        let addr = db::templates::parse_addr(&t.template_address).map_err(AppError::internal)?;
-        let metadata = db::metadata::get_metadata(&state.pool, &addr).await?;
-        results.push(to_template_response(t, metadata));
-    }
+    let rows = db::templates::list_featured_with_metadata(&state.pool).await?;
+    let results = rows
+        .into_iter()
+        .map(to_template_response_from_joined)
+        .collect();
     Ok(Json(results))
 }
 
@@ -78,7 +76,7 @@ async fn get_template(
     Ok(Json(to_template_response(template, metadata)))
 }
 
-fn author_friendly_name<'a>(metadata: &'a Option<db::metadata::MetadataRow>) -> Option<&'a str> {
+fn author_friendly_name(metadata: &Option<db::metadata::MetadataRow>) -> Option<&str> {
     metadata
         .as_ref()
         .and_then(|m| m.extra.get("author_friendly_name"))
@@ -113,5 +111,38 @@ fn to_template_response(
             license: m.license,
             logo_url: m.logo_url,
         }),
+    }
+}
+
+fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -> TemplateResponse {
+    let friendly_name = r.author_friendly_name().map(str::to_string);
+    let has_metadata = r.meta_name.is_some();
+    TemplateResponse {
+        template_address: r.template_address,
+        template_name: r.template_name,
+        author_public_key: r.author_public_key,
+        author_friendly_name: friendly_name,
+        binary_hash: r.binary_hash,
+        at_epoch: r.at_epoch,
+        metadata_hash: r.metadata_hash,
+        definition: None,
+        code_size: r.code_size,
+        is_featured: r.is_featured,
+        metadata: if has_metadata {
+            Some(MetadataResponse {
+                name: r.meta_name.unwrap_or_default(),
+                version: r.meta_version.unwrap_or_default(),
+                description: r.meta_description.unwrap_or_default(),
+                tags: r.meta_tags.unwrap_or_default(),
+                category: r.meta_category,
+                repository: r.meta_repository,
+                documentation: r.meta_documentation,
+                homepage: r.meta_homepage,
+                license: r.meta_license,
+                logo_url: r.meta_logo_url,
+            })
+        } else {
+            None
+        },
     }
 }

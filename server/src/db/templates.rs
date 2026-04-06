@@ -7,12 +7,6 @@ pub fn canonical_addr(addr: &PublishedTemplateAddress) -> String {
     addr.as_hash().to_string()
 }
 
-/// Parse a string (with or without `template_` prefix) into a PublishedTemplateAddress.
-pub fn parse_addr(s: &str) -> Result<PublishedTemplateAddress, String> {
-    s.parse::<PublishedTemplateAddress>()
-        .map_err(|e| format!("Invalid template address: {e}"))
-}
-
 #[derive(Debug, sqlx::FromRow)]
 pub struct TemplateRow {
     pub template_address: String,
@@ -105,12 +99,24 @@ pub async fn get_max_epoch(pool: &PgPool) -> Result<Option<i64>, sqlx::Error> {
     Ok(row.and_then(|r| r.0))
 }
 
-pub async fn list_featured(pool: &PgPool) -> Result<Vec<TemplateRow>, sqlx::Error> {
-    sqlx::query_as::<_, TemplateRow>(
+pub async fn list_featured_with_metadata(
+    pool: &PgPool,
+) -> Result<Vec<TemplateWithMetadataRow>, sqlx::Error> {
+    sqlx::query_as::<_, TemplateWithMetadataRow>(
         r#"
-        SELECT * FROM templates
-        WHERE is_featured = TRUE AND is_blacklisted = FALSE
-        ORDER BY feature_order ASC NULLS LAST, template_name ASC
+        SELECT
+            t.template_address, t.template_name, t.author_public_key, t.binary_hash,
+            t.at_epoch, t.metadata_hash, t.definition, t.code_size,
+            t.is_blacklisted, t.is_featured, t.feature_order, t.created_at, t.updated_at,
+            m.name AS meta_name, m.version AS meta_version, m.description AS meta_description,
+            m.tags AS meta_tags, m.category AS meta_category, m.logo_url AS meta_logo_url,
+            m.repository AS meta_repository, m.documentation AS meta_documentation,
+            m.homepage AS meta_homepage, m.license AS meta_license,
+            m.extra AS meta_extra
+        FROM templates t
+        LEFT JOIN template_metadata m ON t.template_address = m.template_address
+        WHERE t.is_featured = TRUE AND t.is_blacklisted = FALSE
+        ORDER BY t.feature_order ASC NULLS LAST, t.template_name ASC
         "#,
     )
     .fetch_all(pool)
@@ -180,9 +186,9 @@ pub async fn search_templates(
     }
 
     if query.is_some_and(|q| !q.is_empty()) {
-        sql.push_str(&format!(
+        sql.push_str(
             " ORDER BY GREATEST(similarity(t.template_name, $2), similarity(COALESCE(m.description, ''), $2)) DESC"
-        ));
+        );
     } else {
         sql.push_str(" ORDER BY t.at_epoch DESC");
     }

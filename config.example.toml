@@ -1,0 +1,28 @@
+# Ootle Community Templates Server Configuration
+#
+# Generate a default config with: ootle-community-templates --create-config
+#
+# Network determines the default indexer URL.
+# Options: "esmeralda" (testnet, default), "localnet"
+network = "esmeralda"
+
+[server]
+bind_address = "0.0.0.0"
+port = 3000
+# jwt_secret = "set-for-persistent-sessions"
+# If omitted, a random secret is generated on each startup (all JWTs invalidated on restart).
+
+[database]
+url = "postgres://ootle:ootle@localhost:5432/community_templates"
+
+[indexer]
+# url = "https://custom-indexer.example.com/"
+# If omitted, uses the default for the configured network:
+#   esmeralda -> https://ootle-indexer-a.tari.com/
+#   localnet  -> http://localhost:12500
+sync_interval_secs = 60
+
+[admin]
+# Initial admin created on first run if no admins exist
+initial_username = "admin"
+initial_password = "change-me"

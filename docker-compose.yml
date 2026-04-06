@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ootle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ootle}
+      POSTGRES_DB: community_templates
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  server:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ootle}:${POSTGRES_PASSWORD:-ootle}@db:5432/community_templates
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.toml:/app/config.toml
+
+volumes:
+  pgdata:

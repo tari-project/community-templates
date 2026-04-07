@@ -239,7 +239,7 @@ fn default_port() -> u16 {
 }
 
 fn default_database_url() -> String {
-    "postgres://ootle:ootle@localhost:5432/community_templates".to_string()
+    "sqlite://data/community_templates.db".to_string()
 }
 
 fn default_sync_interval() -> u64 {

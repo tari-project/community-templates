@@ -146,9 +146,23 @@ export function logout() {
   localStorage.removeItem("admin_token");
 }
 
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface CategoryCount {
+  category: string;
+  count: number;
+}
+
 // Public API
 export const api = {
   getFeatured: () => request<TemplateResponse[]>("/templates/featured"),
+
+  getTags: () => request<TagCount[]>("/tags"),
+
+  getCategories: () => request<CategoryCount[]>("/categories"),
 
   getTemplate: (addr: string) => request<TemplateResponse>(`/templates/${addr}`),
 

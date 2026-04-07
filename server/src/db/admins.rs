@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct AdminRow {
@@ -10,37 +10,42 @@ pub struct AdminRow {
 }
 
 pub async fn get_by_username(
-    pool: &PgPool,
+    pool: &SqlitePool,
     username: &str,
 ) -> Result<Option<AdminRow>, sqlx::Error> {
-    sqlx::query_as::<_, AdminRow>("SELECT * FROM admins WHERE username = $1")
+    sqlx::query_as::<_, AdminRow>("SELECT * FROM admins WHERE username = ?")
         .bind(username)
         .fetch_optional(pool)
         .await
 }
 
 pub async fn create_admin(
-    pool: &PgPool,
+    pool: &SqlitePool,
     username: &str,
     password_hash: &str,
 ) -> Result<AdminRow, sqlx::Error> {
-    sqlx::query_as::<_, AdminRow>(
-        "INSERT INTO admins (username, password_hash) VALUES ($1, $2) RETURNING *",
-    )
-    .bind(username)
-    .bind(password_hash)
-    .fetch_one(pool)
-    .await
+    let mut tx = pool.begin().await?;
+    sqlx::query("INSERT INTO admins (username, password_hash) VALUES (?, ?)")
+        .bind(username)
+        .bind(password_hash)
+        .execute(&mut *tx)
+        .await?;
+    let admin = sqlx::query_as::<_, AdminRow>("SELECT * FROM admins WHERE username = ?")
+        .bind(username)
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(admin)
 }
 
-pub async fn list_admins(pool: &PgPool) -> Result<Vec<AdminRow>, sqlx::Error> {
+pub async fn list_admins(pool: &SqlitePool) -> Result<Vec<AdminRow>, sqlx::Error> {
     sqlx::query_as::<_, AdminRow>("SELECT * FROM admins ORDER BY id")
         .fetch_all(pool)
         .await
 }
 
-pub async fn delete_admin(pool: &PgPool, id: i32) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query("DELETE FROM admins WHERE id = $1")
+pub async fn delete_admin(pool: &SqlitePool, id: i32) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query("DELETE FROM admins WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await?;
@@ -48,11 +53,11 @@ pub async fn delete_admin(pool: &PgPool, id: i32) -> Result<bool, sqlx::Error> {
 }
 
 pub async fn update_password(
-    pool: &PgPool,
+    pool: &SqlitePool,
     id: i32,
     password_hash: &str,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query("UPDATE admins SET password_hash = $1 WHERE id = $2")
+    let result = sqlx::query("UPDATE admins SET password_hash = ? WHERE id = ?")
         .bind(password_hash)
         .bind(id)
         .execute(pool)
@@ -60,7 +65,7 @@ pub async fn update_password(
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn count(pool: &PgPool) -> Result<i64, sqlx::Error> {
+pub async fn count(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM admins")
         .fetch_one(pool)
         .await?;

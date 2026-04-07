@@ -7,11 +7,11 @@ pub mod templates;
 use std::sync::Arc;
 
 use axum::{http::Method, middleware, Router};
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use tower_http::cors::{Any, CorsLayer};
 
 pub struct AppState {
-    pub pool: PgPool,
+    pub pool: SqlitePool,
     /// Resolved JWT secret bytes (random if not configured, stable for the lifetime of the process).
     pub jwt_secret: Vec<u8>,
 }

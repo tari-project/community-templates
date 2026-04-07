@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AdminTemplate } from "../../api/client";
+import SafeImage from "../../components/SafeImage";
 
 export default function FeaturedManager() {
   const [templates, setTemplates] = useState<AdminTemplate[]>([]);
@@ -30,7 +31,11 @@ export default function FeaturedManager() {
 
   return (
     <div>
-      <h2 style={{ marginBottom: "1.5rem" }}>Featured Templates</h2>
+      <h2 style={{ marginBottom: "1rem" }}>Featured Templates</h2>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "1.5rem" }}>
+        Featured templates have their logo displayed publicly on the site.
+        Review the logo URL before featuring a template.
+      </p>
 
       {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
 
@@ -63,14 +68,20 @@ function TemplateList({
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
+            gap: "0.75rem",
             padding: "0.75rem 1rem",
             background: "var(--grad-accent)",
             border: "1px solid var(--color-purple-dim)",
             borderRadius: "var(--radius)",
           }}
         >
-          <div>
+          <SafeImage
+            url={t.logo_url}
+            alt={t.template_name}
+            size={32}
+            trusted
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
             <strong>{t.template_name}</strong>
             <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginLeft: "0.75rem" }}>
               {t.template_address.slice(0, 12)}...

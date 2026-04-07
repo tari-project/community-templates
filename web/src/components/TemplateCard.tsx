@@ -49,6 +49,7 @@ export default function TemplateCard({ data }: { data: CardData }) {
           url={logoUrl ?? null}
           alt={name}
           size={48}
+          trusted={data.is_featured}
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3 style={{ fontSize: "1.1rem", marginBottom: "0.2rem" }}>{name}</h3>

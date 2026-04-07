@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AdminTemplate } from "../../api/client";
+import SafeImage from "../../components/SafeImage";
 
 export default function BlacklistManager() {
   const [templates, setTemplates] = useState<AdminTemplate[]>([]);
@@ -69,6 +70,7 @@ function TemplateRow({
       style={{
         display: "flex",
         alignItems: "center",
+        gap: "0.75rem",
         justifyContent: "space-between",
         padding: "0.75rem 1rem",
         background: "var(--grad-accent)",
@@ -76,7 +78,8 @@ function TemplateRow({
         borderRadius: "var(--radius)",
       }}
     >
-      <div>
+      <SafeImage url={t.logo_url} alt={t.template_name} size={32} trusted />
+      <div style={{ flex: 1, minWidth: 0 }}>
         <strong>{t.template_name}</strong>
         <span style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginLeft: "0.75rem" }}>
           {t.template_address.slice(0, 12)}...

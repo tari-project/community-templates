@@ -17,14 +17,17 @@ export default function SafeImage({
   url,
   alt,
   size,
+  trusted = false,
 }: {
   url: string | null;
   alt: string;
   size: number;
+  /** Only render external images when trusted (e.g. admin-featured templates). */
+  trusted?: boolean;
 }) {
   const [errored, setErrored] = useState(false);
 
-  if (!url || !isValidLogoUrl(url) || errored) {
+  if (!trusted || !url || !isValidLogoUrl(url) || errored) {
     return (
       <div
         style={{

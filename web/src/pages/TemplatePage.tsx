@@ -36,6 +36,7 @@ export default function TemplatePage() {
           url={meta?.logo_url ?? null}
           alt={meta?.name || template.template_name}
           size={80}
+          trusted={template.is_featured}
         />
         <div>
           <h1 style={{ fontSize: "2.5rem" }}>{meta?.name || template.template_name}</h1>

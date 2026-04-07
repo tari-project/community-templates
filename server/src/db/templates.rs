@@ -19,6 +19,7 @@ pub struct TemplateRow {
     pub code_size: Option<i64>,
     pub is_blacklisted: bool,
     pub is_featured: bool,
+    #[allow(dead_code)]
     pub feature_order: Option<i32>,
     #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
@@ -298,14 +299,55 @@ pub async fn list_all_admin(
     pool: &PgPool,
     limit: i64,
     offset: i64,
-) -> Result<Vec<TemplateRow>, sqlx::Error> {
-    sqlx::query_as::<_, TemplateRow>(
-        "SELECT * FROM templates ORDER BY at_epoch DESC LIMIT $1 OFFSET $2",
+) -> Result<Vec<TemplateWithMetadataRow>, sqlx::Error> {
+    sqlx::query_as::<_, TemplateWithMetadataRow>(
+        r#"
+        SELECT
+            t.template_address, t.template_name, t.author_public_key, t.binary_hash,
+            t.at_epoch, t.metadata_hash, t.definition, t.code_size,
+            t.is_blacklisted, t.is_featured, t.feature_order, t.created_at, t.updated_at,
+            m.name AS meta_name, m.version AS meta_version, m.description AS meta_description,
+            m.tags AS meta_tags, m.category AS meta_category, m.logo_url AS meta_logo_url,
+            m.repository AS meta_repository, m.documentation AS meta_documentation,
+            m.homepage AS meta_homepage, m.license AS meta_license,
+            m.extra AS meta_extra
+        FROM templates t
+        LEFT JOIN template_metadata m ON t.template_address = m.template_address
+        ORDER BY t.at_epoch DESC
+        LIMIT $1 OFFSET $2
+        "#,
     )
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)
     .await
+}
+
+pub async fn get_stats(pool: &PgPool) -> Result<crate::api::admin::StatsResponse, sqlx::Error> {
+    let row: (i64, i64, i64, i64) = sqlx::query_as(
+        r#"
+        SELECT
+            COUNT(*),
+            COUNT(*) FILTER (WHERE definition IS NOT NULL),
+            COUNT(*) FILTER (WHERE is_featured = TRUE),
+            COUNT(*) FILTER (WHERE is_blacklisted = TRUE)
+        FROM templates
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let (with_metadata,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM template_metadata")
+        .fetch_one(pool)
+        .await?;
+
+    Ok(crate::api::admin::StatsResponse {
+        total_templates: row.0,
+        with_definition: row.1,
+        featured: row.2,
+        blacklisted: row.3,
+        with_metadata,
+    })
 }
 
 /// Get a batch of template addresses that still need their definition fetched.

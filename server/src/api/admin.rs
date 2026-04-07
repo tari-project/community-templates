@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/stats", get(get_stats))
         .route("/templates", get(list_templates))
         .route("/templates/{addr}/featured", put(set_featured))
         .route("/templates/{addr}/blacklist", put(set_blacklisted))
@@ -22,6 +23,20 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/admins", post(create_admin))
         .route("/admins/{id}", delete(delete_admin))
         .route("/admins/{id}/password", put(change_password))
+}
+
+#[derive(Debug, Serialize)]
+pub struct StatsResponse {
+    pub total_templates: i64,
+    pub with_metadata: i64,
+    pub with_definition: i64,
+    pub featured: i64,
+    pub blacklisted: i64,
+}
+
+async fn get_stats(State(state): State<Arc<AppState>>) -> Result<Json<StatsResponse>, AppError> {
+    let stats = db::templates::get_stats(&state.pool).await?;
+    Ok(Json(stats))
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +55,7 @@ pub struct AdminTemplateResponse {
     pub feature_order: Option<i32>,
     pub has_definition: bool,
     pub has_metadata_hash: bool,
+    pub logo_url: Option<String>,
 }
 
 async fn list_templates(
@@ -61,6 +77,7 @@ async fn list_templates(
             feature_order: t.feature_order,
             has_definition: t.definition.is_some(),
             has_metadata_hash: t.metadata_hash.is_some(),
+            logo_url: t.meta_logo_url,
         })
         .collect();
     Ok(Json(results))

@@ -95,6 +95,15 @@ export interface AdminTemplate {
   feature_order: number | null;
   has_definition: boolean;
   has_metadata_hash: boolean;
+  logo_url: string | null;
+}
+
+export interface StatsResponse {
+  total_templates: number;
+  with_metadata: number;
+  with_definition: number;
+  featured: number;
+  blacklisted: number;
 }
 
 export interface AdminUser {
@@ -170,6 +179,8 @@ export const api = {
 
   // Admin
   admin: {
+    getStats: () => request<StatsResponse>("/admin/stats"),
+
     listTemplates: (limit = 50, offset = 0) =>
       request<AdminTemplate[]>(`/admin/templates?limit=${limit}&offset=${offset}`),
 

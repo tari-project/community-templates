@@ -117,9 +117,20 @@ export default function TemplatePage() {
             borderRadius: "var(--radius)",
           }}
         >
-          <p style={{ color: "var(--text-muted)" }}>
-            No verified metadata available for this template. The template author can submit
-            metadata to add a description, tags, links, and more.
+          <p style={{ color: "var(--text-muted)", display: "flex", alignItems: "flex-start", gap: "0.6rem" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "0.15rem" }}>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>
+              No verified metadata available for this template. The template author can submit
+              metadata to add a description, tags, links, and more. The recommended way to do this is
+              using the{" "}
+              <a href="https://tari-project.github.io/tari-cli/reference/template-publish/" target="_blank" rel="noopener noreferrer">
+                Tari CLI
+              </a>.
+            </span>
           </p>
         </section>
       )}

@@ -40,8 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let config = config::Config::load(&cli)?;
 
     tracing::info!("Connecting to database...");
-    let opts = SqliteConnectOptions::from_str(&config.database.url)?
-        .create_if_missing(true);
+    let opts = SqliteConnectOptions::from_str(&config.database.url)?.create_if_missing(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(opts)

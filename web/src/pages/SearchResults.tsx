@@ -1,20 +1,32 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, type SearchResult } from "../api/client";
+import { api, type CategoryCount, type SearchResult, type TagCount } from "../api/client";
+import CategorySelect from "../components/CategorySelect";
+import TagInput from "../components/TagInput";
 import TemplateCard from "../components/TemplateCard";
 
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [tagSuggestions, setTagSuggestions] = useState<TagCount[]>([]);
+  const [categorySuggestions, setCategorySuggestions] = useState<CategoryCount[]>([]);
 
   const q = searchParams.get("q") || "";
   const tags = searchParams.get("tags") || "";
   const category = searchParams.get("category") || "";
 
   const [searchInput, setSearchInput] = useState(q);
-  const [tagInput, setTagInput] = useState(tags);
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+  );
   const [categoryInput, setCategoryInput] = useState(category);
+
+  // Fetch suggestions once
+  useEffect(() => {
+    api.getTags().then(setTagSuggestions).catch(console.error);
+    api.getCategories().then(setCategorySuggestions).catch(console.error);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -29,7 +41,7 @@ export default function SearchResults() {
     e.preventDefault();
     const params: Record<string, string> = {};
     if (searchInput.trim()) params.q = searchInput.trim();
-    if (tagInput.trim()) params.tags = tagInput.trim();
+    if (selectedTags.length > 0) params.tags = selectedTags.join(",");
     if (categoryInput.trim()) params.category = categoryInput.trim();
     setSearchParams(params);
   };
@@ -45,6 +57,7 @@ export default function SearchResults() {
           gap: "0.75rem",
           marginBottom: "2rem",
           flexWrap: "wrap",
+          alignItems: "flex-start",
         }}
       >
         <input
@@ -54,19 +67,17 @@ export default function SearchResults() {
           onChange={(e) => setSearchInput(e.target.value)}
           style={{ flex: 2, minWidth: "200px" }}
         />
-        <input
-          type="text"
-          placeholder="Tags (comma-separated)"
-          value={tagInput}
-          onChange={(e) => setTagInput(e.target.value)}
-          style={{ flex: 1, minWidth: "150px" }}
+        <TagInput
+          value={selectedTags}
+          onChange={setSelectedTags}
+          suggestions={tagSuggestions}
+          placeholder="Filter by tags..."
         />
-        <input
-          type="text"
-          placeholder="Category"
+        <CategorySelect
           value={categoryInput}
-          onChange={(e) => setCategoryInput(e.target.value)}
-          style={{ flex: 1, minWidth: "120px" }}
+          onChange={setCategoryInput}
+          suggestions={categorySuggestions}
+          placeholder="Category..."
         />
         <button type="submit" className="btn btn-primary">
           Search

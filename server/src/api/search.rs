@@ -11,7 +11,10 @@ use super::AppState;
 use crate::{db, error::AppError};
 
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/search", get(search))
+    Router::new()
+        .route("/search", get(search))
+        .route("/tags", get(get_tags))
+        .route("/categories", get(get_categories))
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +55,38 @@ pub struct SearchResult {
     pub meta_documentation: Option<String>,
     pub meta_homepage: Option<String>,
     pub meta_license: Option<String>,
+}
+
+async fn get_tags(State(state): State<Arc<AppState>>) -> Result<Json<Vec<TagCount>>, AppError> {
+    let rows = db::metadata::get_popular_tags(&state.pool, 50).await?;
+    let tags = rows
+        .into_iter()
+        .map(|(tag, count)| TagCount { tag, count })
+        .collect();
+    Ok(Json(tags))
+}
+
+#[derive(Debug, Serialize)]
+pub struct TagCount {
+    pub tag: String,
+    pub count: i64,
+}
+
+async fn get_categories(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<CategoryCount>>, AppError> {
+    let rows = db::metadata::get_categories(&state.pool).await?;
+    let categories = rows
+        .into_iter()
+        .map(|(category, count)| CategoryCount { category, count })
+        .collect();
+    Ok(Json(categories))
+}
+
+#[derive(Debug, Serialize)]
+pub struct CategoryCount {
+    pub category: String,
+    pub count: i64,
 }
 
 async fn search(

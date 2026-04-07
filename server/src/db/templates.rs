@@ -164,9 +164,7 @@ pub async fn search_templates(
     }
 
     for tag in tags {
-        sql.push_str(
-            " AND EXISTS (SELECT 1 FROM json_each(m.tags) WHERE json_each.value = ?)",
-        );
+        sql.push_str(" AND EXISTS (SELECT 1 FROM json_each(m.tags) WHERE json_each.value = ?)");
         binds.push(tag.clone());
     }
 
@@ -348,7 +346,10 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<TemplateStats, sqlx::Error> 
 }
 
 /// Get a batch of template addresses that still need their definition fetched.
-pub async fn get_without_definition(pool: &SqlitePool, limit: i64) -> Result<Vec<String>, sqlx::Error> {
+pub async fn get_without_definition(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<String>, sqlx::Error> {
     let rows: Vec<(String,)> = sqlx::query_as(
         "SELECT template_address FROM templates WHERE definition IS NULL AND is_blacklisted = 0 LIMIT ?",
     )

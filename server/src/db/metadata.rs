@@ -108,3 +108,39 @@ pub async fn get_metadata(
         .fetch_optional(pool)
         .await
 }
+
+/// Returns all categories with their template counts, ordered by frequency.
+pub async fn get_categories(pool: &SqlitePool) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
+        r#"
+        SELECT category, COUNT(*) AS cnt
+        FROM template_metadata
+        WHERE category IS NOT NULL AND category != ''
+        GROUP BY category
+        ORDER BY cnt DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Returns the most popular tags across all templates, ordered by frequency.
+pub async fn get_popular_tags(
+    pool: &SqlitePool,
+    limit: i64,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
+        r#"
+        SELECT json_each.value AS tag, COUNT(*) AS cnt
+        FROM template_metadata, json_each(template_metadata.tags)
+        GROUP BY json_each.value
+        ORDER BY cnt DESC
+        LIMIT ?
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}

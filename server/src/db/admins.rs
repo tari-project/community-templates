@@ -24,15 +24,18 @@ pub async fn create_admin(
     username: &str,
     password_hash: &str,
 ) -> Result<AdminRow, sqlx::Error> {
+    let mut tx = pool.begin().await?;
     sqlx::query("INSERT INTO admins (username, password_hash) VALUES (?, ?)")
         .bind(username)
         .bind(password_hash)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
-    sqlx::query_as::<_, AdminRow>("SELECT * FROM admins WHERE username = ?")
+    let admin = sqlx::query_as::<_, AdminRow>("SELECT * FROM admins WHERE username = ?")
         .bind(username)
-        .fetch_one(pool)
-        .await
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(admin)
 }
 
 pub async fn list_admins(pool: &SqlitePool) -> Result<Vec<AdminRow>, sqlx::Error> {

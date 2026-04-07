@@ -22,6 +22,13 @@ export default function SearchResults() {
   );
   const [categoryInput, setCategoryInput] = useState(category);
 
+  // Sync inputs with URL params (e.g. browser back/forward)
+  useEffect(() => {
+    setSearchInput(q);
+    setSelectedTags(tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : []);
+    setCategoryInput(category);
+  }, [q, tags, category]);
+
   // Fetch suggestions once
   useEffect(() => {
     api.getTags().then(setTagSuggestions).catch(console.error);

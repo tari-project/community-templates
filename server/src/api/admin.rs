@@ -36,7 +36,13 @@ pub struct StatsResponse {
 
 async fn get_stats(State(state): State<Arc<AppState>>) -> Result<Json<StatsResponse>, AppError> {
     let stats = db::templates::get_stats(&state.pool).await?;
-    Ok(Json(stats))
+    Ok(Json(StatsResponse {
+        total_templates: stats.total_templates,
+        with_metadata: stats.with_metadata,
+        with_definition: stats.with_definition,
+        featured: stats.featured,
+        blacklisted: stats.blacklisted,
+    }))
 }
 
 #[derive(Debug, Deserialize)]

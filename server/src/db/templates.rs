@@ -323,7 +323,15 @@ pub async fn list_all_admin(
     .await
 }
 
-pub async fn get_stats(pool: &PgPool) -> Result<crate::api::admin::StatsResponse, sqlx::Error> {
+pub struct TemplateStats {
+    pub total_templates: i64,
+    pub with_metadata: i64,
+    pub with_definition: i64,
+    pub featured: i64,
+    pub blacklisted: i64,
+}
+
+pub async fn get_stats(pool: &PgPool) -> Result<TemplateStats, sqlx::Error> {
     let row: (i64, i64, i64, i64) = sqlx::query_as(
         r#"
         SELECT
@@ -341,7 +349,7 @@ pub async fn get_stats(pool: &PgPool) -> Result<crate::api::admin::StatsResponse
         .fetch_one(pool)
         .await?;
 
-    Ok(crate::api::admin::StatsResponse {
+    Ok(TemplateStats {
         total_templates: row.0,
         with_definition: row.1,
         featured: row.2,

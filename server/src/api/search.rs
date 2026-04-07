@@ -83,6 +83,7 @@ async fn search(
         .into_iter()
         .map(|r| {
             let author_friendly_name = r.author_friendly_name().map(str::to_string);
+            let meta_tags = r.meta_tags();
             SearchResult {
                 template_address: r.template_address,
                 template_name: r.template_name,
@@ -97,7 +98,7 @@ async fn search(
                 meta_name: r.meta_name,
                 meta_version: r.meta_version,
                 meta_description: r.meta_description,
-                meta_tags: r.meta_tags,
+                meta_tags,
                 meta_category: r.meta_category,
                 meta_logo_url: r.meta_logo_url,
                 meta_repository: r.meta_repository,

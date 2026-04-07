@@ -88,6 +88,21 @@ fn to_template_response(
     metadata: Option<db::metadata::MetadataRow>,
 ) -> TemplateResponse {
     let friendly_name = author_friendly_name(&metadata).map(str::to_string);
+    let meta_resp = metadata.map(|m| {
+        let tags = m.tags();
+        MetadataResponse {
+            name: m.name,
+            version: m.version,
+            description: m.description,
+            tags,
+            category: m.category,
+            repository: m.repository,
+            documentation: m.documentation,
+            homepage: m.homepage,
+            license: m.license,
+            logo_url: m.logo_url,
+        }
+    });
     TemplateResponse {
         template_address: t.template_address,
         template_name: t.template_name,
@@ -99,24 +114,14 @@ fn to_template_response(
         definition: t.definition,
         code_size: t.code_size,
         is_featured: t.is_featured,
-        metadata: metadata.map(|m| MetadataResponse {
-            name: m.name,
-            version: m.version,
-            description: m.description,
-            tags: m.tags,
-            category: m.category,
-            repository: m.repository,
-            documentation: m.documentation,
-            homepage: m.homepage,
-            license: m.license,
-            logo_url: m.logo_url,
-        }),
+        metadata: meta_resp,
     }
 }
 
 fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -> TemplateResponse {
     let friendly_name = r.author_friendly_name().map(str::to_string);
     let has_metadata = r.meta_name.is_some();
+    let meta_tags = r.meta_tags().unwrap_or_default();
     TemplateResponse {
         template_address: r.template_address,
         template_name: r.template_name,
@@ -133,7 +138,7 @@ fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -
                 name: r.meta_name.unwrap_or_default(),
                 version: r.meta_version.unwrap_or_default(),
                 description: r.meta_description.unwrap_or_default(),
-                tags: r.meta_tags.unwrap_or_default(),
+                tags: meta_tags,
                 category: r.meta_category,
                 repository: r.meta_repository,
                 documentation: r.meta_documentation,

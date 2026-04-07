@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use serde::Deserialize;
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use tari_engine_types::published_template::PublishedTemplateAddress;
 
 use crate::{config::IndexerConfig, db};
@@ -30,7 +30,7 @@ struct TemplateDefinitionResponse {
     code_size: usize,
 }
 
-pub async fn run_sync_loop(pool: PgPool, config: IndexerConfig, indexer_url: String) {
+pub async fn run_sync_loop(pool: SqlitePool, config: IndexerConfig, indexer_url: String) {
     let client = reqwest::Client::new();
     let interval = Duration::from_secs(config.sync_interval_secs);
 
@@ -49,7 +49,7 @@ pub async fn run_sync_loop(pool: PgPool, config: IndexerConfig, indexer_url: Str
 }
 
 async fn sync_once(
-    pool: &PgPool,
+    pool: &SqlitePool,
     client: &reqwest::Client,
     indexer_url: &str,
 ) -> anyhow::Result<()> {
@@ -139,7 +139,7 @@ async fn fetch_definition(
     addr: &PublishedTemplateAddress,
 ) -> anyhow::Result<(serde_json::Value, i64)> {
     // The indexer expects the raw hex address (no prefix)
-    let url = format!("{}/templates/{}", indexer_url, addr);
+    let url = format!("{}/templates/{}", indexer_url, addr.as_hash());
     let resp = client.get(&url).send().await?;
     if !resp.status().is_success() {
         anyhow::bail!(

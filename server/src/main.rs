@@ -7,7 +7,8 @@ mod sync;
 use std::sync::Arc;
 
 use clap::Parser;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use std::str::FromStr;
 use tower_http::services::ServeDir;
 
 use crate::{api::AppState, config::Cli};
@@ -39,9 +40,11 @@ async fn main() -> anyhow::Result<()> {
     let config = config::Config::load(&cli)?;
 
     tracing::info!("Connecting to database...");
-    let pool = PgPoolOptions::new()
-        .max_connections(10)
-        .connect(&config.database.url)
+    let opts = SqliteConnectOptions::from_str(&config.database.url)?
+        .create_if_missing(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(opts)
         .await?;
 
     // Run migrations

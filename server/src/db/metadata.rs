@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use tari_engine_types::published_template::PublishedTemplateAddress;
 
 use super::templates::canonical_addr;
@@ -11,7 +11,7 @@ pub struct MetadataRow {
     pub name: String,
     pub version: String,
     pub description: String,
-    pub tags: Vec<String>,
+    pub tags: String,
     pub category: Option<String>,
     pub repository: Option<String>,
     pub documentation: Option<String>,
@@ -28,6 +28,12 @@ pub struct MetadataRow {
     pub created_at: DateTime<Utc>,
     #[allow(dead_code)]
     pub updated_at: DateTime<Utc>,
+}
+
+impl MetadataRow {
+    pub fn tags(&self) -> Vec<String> {
+        serde_json::from_str(&self.tags).unwrap_or_default()
+    }
 }
 
 pub struct NewMetadata {
@@ -47,7 +53,8 @@ pub struct NewMetadata {
     pub cbor_bytes: Vec<u8>,
 }
 
-pub async fn upsert_metadata(pool: &PgPool, m: &NewMetadata) -> Result<(), sqlx::Error> {
+pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), sqlx::Error> {
+    let tags_json = serde_json::to_string(&m.tags).unwrap_or_else(|_| "[]".to_string());
     sqlx::query(
         r#"
         INSERT INTO template_metadata (
@@ -55,7 +62,7 @@ pub async fn upsert_metadata(pool: &PgPool, m: &NewMetadata) -> Result<(), sqlx:
             repository, documentation, homepage, license, logo_url, extra,
             schema_version, cbor_bytes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (template_address) DO UPDATE SET
             name = EXCLUDED.name,
             version = EXCLUDED.version,
@@ -70,14 +77,14 @@ pub async fn upsert_metadata(pool: &PgPool, m: &NewMetadata) -> Result<(), sqlx:
             extra = EXCLUDED.extra,
             schema_version = EXCLUDED.schema_version,
             cbor_bytes = EXCLUDED.cbor_bytes,
-            updated_at = NOW()
+            updated_at = datetime('now')
         "#,
     )
     .bind(canonical_addr(&m.template_address))
     .bind(&m.name)
     .bind(&m.version)
     .bind(&m.description)
-    .bind(&m.tags)
+    .bind(&tags_json)
     .bind(&m.category)
     .bind(&m.repository)
     .bind(&m.documentation)
@@ -93,10 +100,10 @@ pub async fn upsert_metadata(pool: &PgPool, m: &NewMetadata) -> Result<(), sqlx:
 }
 
 pub async fn get_metadata(
-    pool: &PgPool,
+    pool: &SqlitePool,
     addr: &PublishedTemplateAddress,
 ) -> Result<Option<MetadataRow>, sqlx::Error> {
-    sqlx::query_as::<_, MetadataRow>("SELECT * FROM template_metadata WHERE template_address = $1")
+    sqlx::query_as::<_, MetadataRow>("SELECT * FROM template_metadata WHERE template_address = ?")
         .bind(canonical_addr(addr))
         .fetch_optional(pool)
         .await

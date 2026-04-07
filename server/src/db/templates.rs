@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use tari_engine_types::published_template::PublishedTemplateAddress;
 
 /// Returns the raw hex of a template address for DB storage (no `template_` prefix).
@@ -37,19 +37,19 @@ pub struct NewTemplate {
     pub metadata_hash: Option<String>,
 }
 
-pub async fn upsert_template(pool: &PgPool, t: &NewTemplate) -> Result<(), sqlx::Error> {
+pub async fn upsert_template(pool: &SqlitePool, t: &NewTemplate) -> Result<(), sqlx::Error> {
     let addr = canonical_addr(&t.template_address);
     sqlx::query(
         r#"
         INSERT INTO templates (template_address, template_name, author_public_key, binary_hash, at_epoch, metadata_hash)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT (template_address) DO UPDATE SET
             template_name = EXCLUDED.template_name,
             author_public_key = EXCLUDED.author_public_key,
             binary_hash = EXCLUDED.binary_hash,
             at_epoch = EXCLUDED.at_epoch,
             metadata_hash = COALESCE(EXCLUDED.metadata_hash, templates.metadata_hash),
-            updated_at = NOW()
+            updated_at = datetime('now')
         "#,
     )
     .bind(&addr)
@@ -64,36 +64,36 @@ pub async fn upsert_template(pool: &PgPool, t: &NewTemplate) -> Result<(), sqlx:
 }
 
 pub async fn update_template_definition(
-    pool: &PgPool,
+    pool: &SqlitePool,
     addr: &PublishedTemplateAddress,
     definition: &serde_json::Value,
     code_size: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        UPDATE templates SET definition = $2, code_size = $3, updated_at = NOW()
-        WHERE template_address = $1
+        UPDATE templates SET definition = ?, code_size = ?, updated_at = datetime('now')
+        WHERE template_address = ?
         "#,
     )
-    .bind(canonical_addr(addr))
     .bind(definition)
     .bind(code_size)
+    .bind(canonical_addr(addr))
     .execute(pool)
     .await?;
     Ok(())
 }
 
 pub async fn get_template(
-    pool: &PgPool,
+    pool: &SqlitePool,
     addr: &PublishedTemplateAddress,
 ) -> Result<Option<TemplateRow>, sqlx::Error> {
-    sqlx::query_as::<_, TemplateRow>("SELECT * FROM templates WHERE template_address = $1")
+    sqlx::query_as::<_, TemplateRow>("SELECT * FROM templates WHERE template_address = ?")
         .bind(canonical_addr(addr))
         .fetch_optional(pool)
         .await
 }
 
-pub async fn get_max_epoch(pool: &PgPool) -> Result<Option<i64>, sqlx::Error> {
+pub async fn get_max_epoch(pool: &SqlitePool) -> Result<Option<i64>, sqlx::Error> {
     let row: Option<(Option<i64>,)> = sqlx::query_as("SELECT MAX(at_epoch) FROM templates")
         .fetch_optional(pool)
         .await?;
@@ -101,7 +101,7 @@ pub async fn get_max_epoch(pool: &PgPool) -> Result<Option<i64>, sqlx::Error> {
 }
 
 pub async fn list_featured_with_metadata(
-    pool: &PgPool,
+    pool: &SqlitePool,
 ) -> Result<Vec<TemplateWithMetadataRow>, sqlx::Error> {
     sqlx::query_as::<_, TemplateWithMetadataRow>(
         r#"
@@ -116,7 +116,7 @@ pub async fn list_featured_with_metadata(
             m.extra AS meta_extra
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
-        WHERE t.is_featured = TRUE AND t.is_blacklisted = FALSE
+        WHERE t.is_featured = 1 AND t.is_blacklisted = 0
         ORDER BY t.feature_order ASC NULLS LAST, t.template_name ASC
         "#,
     )
@@ -125,7 +125,7 @@ pub async fn list_featured_with_metadata(
 }
 
 pub async fn search_templates(
-    pool: &PgPool,
+    pool: &SqlitePool,
     query: Option<&str>,
     tags: &[String],
     category: Option<&str>,
@@ -146,72 +146,54 @@ pub async fn search_templates(
             m.extra AS meta_extra
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
-        WHERE t.is_blacklisted = FALSE
+        WHERE t.is_blacklisted = 0
         "#,
     );
 
-    let mut param_idx = 1u32;
-    let mut conditions = Vec::new();
+    // Collect bind values in order
+    let mut binds: Vec<String> = Vec::new();
 
     if let Some(q) = query {
         if !q.is_empty() {
-            let like_param = param_idx;
-            let trgm_param = param_idx + 1;
-            conditions.push(format!(
-                "(t.template_name ILIKE ${like_param} OR COALESCE(m.description, '') ILIKE ${like_param} \
-                 OR t.template_name % ${trgm_param} OR COALESCE(m.description, '') % ${trgm_param})"
-            ));
-            param_idx += 2;
-            let _ = q;
+            sql.push_str(
+                " AND (t.template_name LIKE '%' || ? || '%' OR COALESCE(m.description, '') LIKE '%' || ? || '%')",
+            );
+            binds.push(q.to_string());
+            binds.push(q.to_string());
         }
     }
 
-    if !tags.is_empty() {
-        conditions.push(format!("m.tags @> ${}", param_idx));
-        param_idx += 1;
+    for tag in tags {
+        sql.push_str(
+            " AND EXISTS (SELECT 1 FROM json_each(m.tags) WHERE json_each.value = ?)",
+        );
+        binds.push(tag.clone());
     }
 
-    if category.is_some() {
-        conditions.push(format!("m.category = ${}", param_idx));
-        param_idx += 1;
+    if let Some(cat) = category {
+        sql.push_str(" AND m.category = ?");
+        binds.push(cat.to_string());
     }
 
-    if author.is_some() {
-        conditions.push(format!("t.author_public_key = ${}", param_idx));
-        param_idx += 1;
-    }
-
-    for cond in &conditions {
-        sql.push_str(" AND ");
-        sql.push_str(cond);
+    if let Some(author_pk) = author {
+        sql.push_str(" AND t.author_public_key = ?");
+        binds.push(author_pk.to_string());
     }
 
     if query.is_some_and(|q| !q.is_empty()) {
         sql.push_str(
-            " ORDER BY GREATEST(similarity(t.template_name, $2), similarity(COALESCE(m.description, ''), $2)) DESC"
+            " ORDER BY CASE WHEN t.template_name LIKE '%' || ? || '%' THEN 1 ELSE 2 END, t.at_epoch DESC",
         );
+        binds.push(query.unwrap().to_string());
     } else {
         sql.push_str(" ORDER BY t.at_epoch DESC");
     }
 
-    sql.push_str(&format!(" LIMIT ${} OFFSET ${}", param_idx, param_idx + 1));
+    sql.push_str(" LIMIT ? OFFSET ?");
 
     let mut q = sqlx::query_as::<_, TemplateWithMetadataRow>(&sql);
-
-    if let Some(query_str) = query {
-        if !query_str.is_empty() {
-            q = q.bind(format!("%{query_str}%")); // ILIKE pattern
-            q = q.bind(query_str); // trigram similarity
-        }
-    }
-    if !tags.is_empty() {
-        q = q.bind(tags);
-    }
-    if let Some(cat) = category {
-        q = q.bind(cat);
-    }
-    if let Some(author_pk) = author {
-        q = q.bind(author_pk);
+    for val in &binds {
+        q = q.bind(val);
     }
     q = q.bind(limit).bind(offset);
 
@@ -242,7 +224,7 @@ pub struct TemplateWithMetadataRow {
     pub meta_name: Option<String>,
     pub meta_version: Option<String>,
     pub meta_description: Option<String>,
-    pub meta_tags: Option<Vec<String>>,
+    pub meta_tags: Option<String>,
     pub meta_category: Option<String>,
     pub meta_logo_url: Option<String>,
     pub meta_repository: Option<String>,
@@ -253,50 +235,57 @@ pub struct TemplateWithMetadataRow {
 }
 
 impl TemplateWithMetadataRow {
-    /// Extract `author_friendly_name` from the extra JSONB if present.
+    /// Extract `author_friendly_name` from the extra JSON if present.
     pub fn author_friendly_name(&self) -> Option<&str> {
         self.meta_extra
             .as_ref()
             .and_then(|e| e.get("author_friendly_name"))
             .and_then(|v| v.as_str())
     }
+
+    /// Parse meta_tags JSON string into Vec<String>.
+    pub fn meta_tags(&self) -> Option<Vec<String>> {
+        self.meta_tags
+            .as_ref()
+            .and_then(|t| serde_json::from_str(t).ok())
+    }
 }
 
 // Admin queries
 pub async fn set_featured(
-    pool: &PgPool,
+    pool: &SqlitePool,
     addr: &PublishedTemplateAddress,
     featured: bool,
     order: Option<i32>,
 ) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
-        "UPDATE templates SET is_featured = $2, feature_order = $3, updated_at = NOW() WHERE template_address = $1",
+        "UPDATE templates SET is_featured = ?, feature_order = ?, updated_at = datetime('now') WHERE template_address = ?",
     )
-    .bind(canonical_addr(addr))
     .bind(featured)
     .bind(order)
+    .bind(canonical_addr(addr))
     .execute(pool)
     .await?;
     Ok(result.rows_affected() > 0)
 }
 
 pub async fn set_blacklisted(
-    pool: &PgPool,
+    pool: &SqlitePool,
     addr: &PublishedTemplateAddress,
     blacklisted: bool,
 ) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
-        "UPDATE templates SET is_blacklisted = $2, updated_at = NOW() WHERE template_address = $1",
+        "UPDATE templates SET is_blacklisted = ?, updated_at = datetime('now') WHERE template_address = ?",
     )
-    .bind(canonical_addr(addr))
     .bind(blacklisted)
+    .bind(canonical_addr(addr))
     .execute(pool)
     .await?;
     Ok(result.rows_affected() > 0)
 }
 
 pub async fn list_all_admin(
-    pool: &PgPool,
+    pool: &SqlitePool,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<TemplateWithMetadataRow>, sqlx::Error> {
@@ -314,7 +303,7 @@ pub async fn list_all_admin(
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
         ORDER BY t.at_epoch DESC
-        LIMIT $1 OFFSET $2
+        LIMIT ? OFFSET ?
         "#,
     )
     .bind(limit)
@@ -331,14 +320,14 @@ pub struct TemplateStats {
     pub blacklisted: i64,
 }
 
-pub async fn get_stats(pool: &PgPool) -> Result<TemplateStats, sqlx::Error> {
+pub async fn get_stats(pool: &SqlitePool) -> Result<TemplateStats, sqlx::Error> {
     let row: (i64, i64, i64, i64) = sqlx::query_as(
         r#"
         SELECT
             COUNT(*),
-            COUNT(*) FILTER (WHERE definition IS NOT NULL),
-            COUNT(*) FILTER (WHERE is_featured = TRUE),
-            COUNT(*) FILTER (WHERE is_blacklisted = TRUE)
+            SUM(CASE WHEN definition IS NOT NULL THEN 1 ELSE 0 END),
+            SUM(CASE WHEN is_featured = 1 THEN 1 ELSE 0 END),
+            SUM(CASE WHEN is_blacklisted = 1 THEN 1 ELSE 0 END)
         FROM templates
         "#,
     )
@@ -359,9 +348,9 @@ pub async fn get_stats(pool: &PgPool) -> Result<TemplateStats, sqlx::Error> {
 }
 
 /// Get a batch of template addresses that still need their definition fetched.
-pub async fn get_without_definition(pool: &PgPool, limit: i64) -> Result<Vec<String>, sqlx::Error> {
+pub async fn get_without_definition(pool: &SqlitePool, limit: i64) -> Result<Vec<String>, sqlx::Error> {
     let rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT template_address FROM templates WHERE definition IS NULL AND is_blacklisted = FALSE LIMIT $1",
+        "SELECT template_address FROM templates WHERE definition IS NULL AND is_blacklisted = 0 LIMIT ?",
     )
     .bind(limit)
     .fetch_all(pool)

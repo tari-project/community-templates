@@ -93,13 +93,6 @@ pub async fn get_template(
         .await
 }
 
-pub async fn get_max_epoch(pool: &SqlitePool) -> Result<Option<i64>, sqlx::Error> {
-    let row: Option<(Option<i64>,)> = sqlx::query_as("SELECT MAX(at_epoch) FROM templates")
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.and_then(|r| r.0))
-}
-
 pub async fn list_featured_with_metadata(
     pool: &SqlitePool,
 ) -> Result<Vec<TemplateWithMetadataRow>, sqlx::Error> {

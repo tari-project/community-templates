@@ -53,21 +53,14 @@ async fn sync_once(
     client: &reqwest::Client,
     indexer_url: &str,
 ) -> anyhow::Result<()> {
-    let since_epoch = db::templates::get_max_epoch(pool)
-        .await?
-        .map(|e| (e + 1) as u64);
-
-    let mut offset = 0u64;
+    let mut cursor = db::sync_state::get_sync_cursor(pool).await?;
     let limit = 100u64;
     let mut total_new = 0usize;
 
     loop {
-        let mut url = format!(
-            "{}/templates/catalogue?limit={}&offset={}",
-            indexer_url, limit, offset
-        );
-        if let Some(epoch) = since_epoch {
-            url.push_str(&format!("&since_epoch={}", epoch));
+        let mut url = format!("{}/templates/catalogue?limit={}", indexer_url, limit);
+        if let Some(ref after) = cursor {
+            url.push_str(&format!("&after={}", after));
         }
 
         let resp = client.get(&url).send().await?;
@@ -81,7 +74,7 @@ async fn sync_once(
         }
 
         let count = catalogue.entries.len();
-        for entry in catalogue.entries {
+        for entry in &catalogue.entries {
             let addr: PublishedTemplateAddress = entry
                 .template_address
                 .parse()
@@ -89,20 +82,24 @@ async fn sync_once(
 
             let new_template = db::templates::NewTemplate {
                 template_address: addr,
-                template_name: entry.template_name,
-                author_public_key: entry.author_public_key,
-                binary_hash: entry.binary_hash,
+                template_name: entry.template_name.clone(),
+                author_public_key: entry.author_public_key.clone(),
+                binary_hash: entry.binary_hash.clone(),
                 at_epoch: entry.at_epoch as i64,
-                metadata_hash: entry.metadata_hash,
+                metadata_hash: entry.metadata_hash.clone(),
             };
             db::templates::upsert_template(pool, &new_template).await?;
             total_new += 1;
         }
 
+        // Persist cursor after each page for crash recovery
+        let last_addr = &catalogue.entries.last().unwrap().template_address;
+        db::sync_state::set_sync_cursor(pool, last_addr).await?;
+        cursor = Some(last_addr.clone());
+
         if (count as u64) < limit {
             break;
         }
-        offset += limit;
     }
 
     if total_new > 0 {

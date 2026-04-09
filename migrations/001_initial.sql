@@ -40,6 +40,13 @@ CREATE INDEX IF NOT EXISTS idx_metadata_category ON template_metadata (category)
 CREATE INDEX IF NOT EXISTS idx_templates_featured ON templates (is_featured, feature_order) WHERE is_featured = 1;
 CREATE INDEX IF NOT EXISTS idx_templates_at_epoch ON templates (at_epoch);
 
+-- Sync state for cursor-based indexer pagination
+CREATE TABLE IF NOT EXISTS sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Admin users
 CREATE TABLE IF NOT EXISTS admins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

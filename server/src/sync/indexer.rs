@@ -58,7 +58,8 @@ async fn sync_once(
     let mut total_new = 0usize;
 
     loop {
-        let mut url = format!("{}/templates/catalogue?limit={}", indexer_url, limit);
+        let base = indexer_url.trim_end_matches('/');
+        let mut url = format!("{base}/templates/catalogue?limit={limit}");
         if let Some(ref after) = cursor {
             url.push_str(&format!("&after={}", after));
         }
@@ -136,7 +137,8 @@ async fn fetch_definition(
     addr: &PublishedTemplateAddress,
 ) -> anyhow::Result<(serde_json::Value, i64)> {
     // The indexer expects the raw hex address (no prefix)
-    let url = format!("{}/templates/{}", indexer_url, addr.as_hash());
+    let base = indexer_url.trim_end_matches('/');
+    let url = format!("{base}/templates/{}", addr.as_hash());
     let resp = client.get(&url).send().await?;
     if !resp.status().is_success() {
         anyhow::bail!(

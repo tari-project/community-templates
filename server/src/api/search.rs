@@ -8,8 +8,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use super::AppState;
-use crate::{db, error::AppError};
 use crate::error::parse_template_addr;
+use crate::{db, error::AppError};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -113,7 +113,11 @@ async fn search(
 
     let rows = db::templates::search_templates(
         &state.pool,
-        if address_filter.is_some() { None } else { params.q.as_deref() },
+        if address_filter.is_some() {
+            None
+        } else {
+            params.q.as_deref()
+        },
         address_filter.as_deref(),
         &tags,
         params.category.as_deref(),

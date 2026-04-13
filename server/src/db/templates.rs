@@ -120,6 +120,7 @@ pub async fn list_featured_with_metadata(
 pub async fn search_templates(
     pool: &SqlitePool,
     query: Option<&str>,
+    address: Option<&str>,
     tags: &[String],
     category: Option<&str>,
     author: Option<&str>,
@@ -146,7 +147,10 @@ pub async fn search_templates(
     // Collect bind values in order
     let mut binds: Vec<String> = Vec::new();
 
-    if let Some(q) = query {
+    if let Some(addr) = address {
+        sql.push_str(" AND t.template_address = ?");
+        binds.push(addr.to_string());
+    } else if let Some(q) = query {
         if !q.is_empty() {
             sql.push_str(
                 " AND (t.template_name LIKE '%' || ? || '%' OR COALESCE(m.description, '') LIKE '%' || ? || '%')",
@@ -171,7 +175,7 @@ pub async fn search_templates(
         binds.push(author_pk.to_string());
     }
 
-    if query.is_some_and(|q| !q.is_empty()) {
+    if address.is_none() && query.is_some_and(|q| !q.is_empty()) {
         sql.push_str(
             " ORDER BY CASE WHEN t.template_name LIKE '%' || ? || '%' THEN 1 ELSE 2 END, t.at_epoch DESC",
         );

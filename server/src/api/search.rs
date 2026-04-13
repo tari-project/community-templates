@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use super::AppState;
+use crate::error::parse_template_addr;
 use crate::{db, error::AppError};
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -103,9 +104,21 @@ async fn search(
         .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
+    // If the query is a valid template address, search by address instead of text.
+    let address_filter = params
+        .q
+        .as_deref()
+        .and_then(|q| parse_template_addr(q).ok())
+        .map(|addr| db::templates::canonical_addr(&addr));
+
     let rows = db::templates::search_templates(
         &state.pool,
-        params.q.as_deref(),
+        if address_filter.is_some() {
+            None
+        } else {
+            params.q.as_deref()
+        },
+        address_filter.as_deref(),
         &tags,
         params.category.as_deref(),
         params.author.as_deref(),

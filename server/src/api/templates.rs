@@ -45,6 +45,8 @@ pub struct MetadataResponse {
     pub homepage: Option<String>,
     pub license: Option<String>,
     pub logo_url: Option<String>,
+    pub commit_hash: Option<String>,
+    pub supersedes: Option<String>,
 }
 
 async fn get_featured(
@@ -101,6 +103,8 @@ fn to_template_response(
             homepage: m.homepage,
             license: m.license,
             logo_url: m.logo_url,
+            commit_hash: m.commit_hash,
+            supersedes: m.supersedes,
         }
     });
     TemplateResponse {
@@ -145,6 +149,8 @@ fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -
                 homepage: r.meta_homepage,
                 license: r.meta_license,
                 logo_url: r.meta_logo_url,
+                commit_hash: r.meta_commit_hash,
+                supersedes: r.meta_supersedes,
             })
         } else {
             None

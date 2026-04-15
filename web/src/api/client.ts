@@ -25,6 +25,8 @@ export interface MetadataResponse {
   homepage: string | null;
   license: string | null;
   logo_url: string | null;
+  commit_hash: string | null;
+  supersedes: string | null;
 }
 
 export interface TemplateDef {

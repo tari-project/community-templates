@@ -118,6 +118,7 @@ pub async fn list_featured_with_metadata(
     .await
 }
 
+#[expect(clippy::too_many_arguments)]
 pub async fn search_templates(
     pool: &SqlitePool,
     query: Option<&str>,
@@ -147,7 +148,7 @@ pub async fn search_templates(
     );
 
     // Collect bind values in order
-    let mut binds: Vec<String> = Vec::new();
+    let mut binds = Vec::new();
 
     if let Some(addr) = address {
         sql.push_str(" AND t.template_address = ?");
@@ -188,11 +189,14 @@ pub async fn search_templates(
 
     sql.push_str(" LIMIT ? OFFSET ?");
 
-    let mut q = sqlx::query_as::<_, TemplateWithMetadataRow>(&sql);
-    for val in &binds {
-        q = q.bind(val);
-    }
-    q = q.bind(limit).bind(offset);
+    let q = binds
+        .into_iter()
+        .fold(
+            sqlx::query_as::<_, TemplateWithMetadataRow>(&sql),
+            |q, val| q.bind(val),
+        )
+        .bind(limit)
+        .bind(offset);
 
     q.fetch_all(pool).await
 }

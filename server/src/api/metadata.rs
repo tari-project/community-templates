@@ -179,6 +179,11 @@ async fn submit_signed_metadata(
     Ok(Json(resp))
 }
 
+/// Convert a Url to String, only allowing http/https schemes to prevent XSS via javascript: URIs.
+fn safe_url_to_string(url: &url::Url) -> Option<String> {
+    matches!(url.scheme(), "http" | "https").then(|| url.to_string())
+}
+
 async fn store_metadata(
     state: &AppState,
     addr: &PublishedTemplateAddress,
@@ -194,11 +199,11 @@ async fn store_metadata(
         description: metadata.description.clone(),
         tags: metadata.tags.clone(),
         category: metadata.category.clone(),
-        repository: metadata.repository.as_ref().map(|u| u.to_string()),
-        documentation: metadata.documentation.as_ref().map(|u| u.to_string()),
-        homepage: metadata.homepage.as_ref().map(|u| u.to_string()),
+        repository: metadata.repository.as_ref().and_then(safe_url_to_string),
+        documentation: metadata.documentation.as_ref().and_then(safe_url_to_string),
+        homepage: metadata.homepage.as_ref().and_then(safe_url_to_string),
         license: metadata.license.clone(),
-        logo_url: metadata.logo_url.as_ref().map(|u| u.to_string()),
+        logo_url: metadata.logo_url.as_ref().and_then(safe_url_to_string),
         commit_hash: metadata.commit_hash.as_ref().map(|h| h.to_string()),
         supersedes: metadata.supersedes.as_ref().map(|a| a.to_string()),
         extra,
@@ -216,11 +221,11 @@ async fn store_metadata(
             description: metadata.description.clone(),
             tags: metadata.tags.clone(),
             category: metadata.category.clone(),
-            repository: metadata.repository.as_ref().map(|u| u.to_string()),
-            documentation: metadata.documentation.as_ref().map(|u| u.to_string()),
-            homepage: metadata.homepage.as_ref().map(|u| u.to_string()),
+            repository: metadata.repository.as_ref().and_then(safe_url_to_string),
+            documentation: metadata.documentation.as_ref().and_then(safe_url_to_string),
+            homepage: metadata.homepage.as_ref().and_then(safe_url_to_string),
             license: metadata.license.clone(),
-            logo_url: metadata.logo_url.as_ref().map(|u| u.to_string()),
+            logo_url: metadata.logo_url.as_ref().and_then(safe_url_to_string),
             commit_hash: metadata.commit_hash.as_ref().map(|h| h.to_string()),
             supersedes: metadata.supersedes.as_ref().map(|a| a.to_string()),
         },

@@ -651,6 +651,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "faster-hex"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2a2b11eda1d40935b26cf18f6833c526845ae8c41e58d09af6adeb6f0269183"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -842,6 +851,17 @@ dependencies = [
  "r-efi 6.0.0",
  "wasip2",
  "wasip3",
+]
+
+[[package]]
+name = "gix-hash"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5eccc17194ed0e67d49285e4853307e4147e95407f91c1c3e4a13ba9f4e4ce"
+dependencies = [
+ "faster-hex",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -1587,13 +1607,14 @@ dependencies = [
  "sqlx",
  "tari_crypto",
  "tari_engine_types",
- "tari_ootle_template_metadata",
+ "tari_ootle_template_metadata 0.5.0",
  "thiserror",
  "tokio",
  "toml 0.8.23",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -1603,7 +1624,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8da67449d365871bf7ac1d723b20142a1d531c0cb49f7e692a98a20cf5d455f9"
 dependencies = [
  "tari_crypto",
- "tari_template_lib_types",
+ "tari_template_lib_types 0.23.0",
 ]
 
 [[package]]
@@ -2715,7 +2736,7 @@ dependencies = [
  "tari_bor",
  "tari_crypto",
  "tari_hashing",
- "tari_ootle_template_metadata",
+ "tari_ootle_template_metadata 0.4.0",
  "tari_template_abi",
  "tari_template_lib",
  "thiserror",
@@ -2744,10 +2765,28 @@ dependencies = [
  "hex",
  "multihash",
  "serde",
- "serde_json",
  "sha2",
  "tari_bor",
  "thiserror",
+]
+
+[[package]]
+name = "tari_ootle_template_metadata"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffdcaeb65b812fcd5faf57cba615a8a2537af59e8bb7b103661cbddaa90703bb"
+dependencies = [
+ "cargo_toml",
+ "gix-hash",
+ "hex",
+ "multihash",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tari_bor",
+ "tari_template_lib_types 0.24.0",
+ "thiserror",
+ "url",
 ]
 
 [[package]]
@@ -2771,7 +2810,7 @@ dependencies = [
  "serde",
  "tari_bor",
  "tari_template_abi",
- "tari_template_lib_types",
+ "tari_template_lib_types 0.23.0",
  "tari_template_macros",
 ]
 
@@ -2784,6 +2823,17 @@ dependencies = [
  "bnum",
  "borsh",
  "num-integer",
+ "serde",
+ "tari_bor",
+ "tari_template_abi",
+]
+
+[[package]]
+name = "tari_template_lib_types"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57e676bfffcab966319ce419099ba9f783d492910228291eebbebb62d4e2dd77"
+dependencies = [
  "serde",
  "tari_bor",
  "tari_template_abi",
@@ -3295,6 +3345,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]

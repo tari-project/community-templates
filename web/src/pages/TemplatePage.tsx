@@ -106,6 +106,34 @@ export default function TemplatePage() {
               <span style={{ color: "var(--text-muted)" }}>License: {meta.license}</span>
             )}
           </div>
+
+          {meta.commit_hash && (
+            <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              Commit: <code style={{ fontSize: "0.8rem" }}>{meta.commit_hash}</code>
+              {meta.repository && (
+                <>
+                  {" "}
+                  <a
+                    href={`${meta.repository.replace(/\.git$/, "")}/commit/${meta.commit_hash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: "0.8rem" }}
+                  >
+                    (view)
+                  </a>
+                </>
+              )}
+            </div>
+          )}
+
+          {meta.supersedes && (
+            <div style={{ marginTop: "0.5rem", fontSize: "0.85rem" }}>
+              Supersedes:{" "}
+              <Link to={`/templates/${meta.supersedes}`} style={{ fontSize: "0.85rem" }}>
+                <code style={{ fontSize: "0.8rem" }}>{meta.supersedes.slice(0, 16)}...</code>
+              </Link>
+            </div>
+          )}
         </section>
       ) : (
         <section

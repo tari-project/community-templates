@@ -18,6 +18,8 @@ pub struct MetadataRow {
     pub homepage: Option<String>,
     pub license: Option<String>,
     pub logo_url: Option<String>,
+    pub commit_hash: Option<String>,
+    pub supersedes: Option<String>,
     #[allow(dead_code)]
     pub extra: serde_json::Value,
     #[allow(dead_code)]
@@ -48,6 +50,8 @@ pub struct NewMetadata {
     pub homepage: Option<String>,
     pub license: Option<String>,
     pub logo_url: Option<String>,
+    pub commit_hash: Option<String>,
+    pub supersedes: Option<String>,
     pub extra: serde_json::Value,
     pub schema_version: i32,
     pub cbor_bytes: Vec<u8>,
@@ -59,10 +63,10 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
         r#"
         INSERT INTO template_metadata (
             template_address, name, version, description, tags, category,
-            repository, documentation, homepage, license, logo_url, extra,
-            schema_version, cbor_bytes
+            repository, documentation, homepage, license, logo_url,
+            commit_hash, supersedes, extra, schema_version, cbor_bytes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (template_address) DO UPDATE SET
             name = EXCLUDED.name,
             version = EXCLUDED.version,
@@ -74,6 +78,8 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
             homepage = EXCLUDED.homepage,
             license = EXCLUDED.license,
             logo_url = EXCLUDED.logo_url,
+            commit_hash = EXCLUDED.commit_hash,
+            supersedes = EXCLUDED.supersedes,
             extra = EXCLUDED.extra,
             schema_version = EXCLUDED.schema_version,
             cbor_bytes = EXCLUDED.cbor_bytes,
@@ -91,6 +97,8 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
     .bind(&m.homepage)
     .bind(&m.license)
     .bind(&m.logo_url)
+    .bind(&m.commit_hash)
+    .bind(&m.supersedes)
     .bind(&m.extra)
     .bind(m.schema_version)
     .bind(&m.cbor_bytes)

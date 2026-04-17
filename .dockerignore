@@ -1,0 +1,14 @@
+target/
+**/node_modules/
+web/dist/
+*.tsbuildinfo
+
+.git/
+.github/
+.claude/
+.idea/
+.vscode/
+
+.env
+config.toml
+data/

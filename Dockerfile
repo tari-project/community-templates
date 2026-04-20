@@ -8,7 +8,8 @@ COPY server/Cargo.toml server/Cargo.toml
 
 # Build dependencies only (dummy main)
 RUN mkdir -p server/src && echo "fn main() {}" > server/src/main.rs \
-    && cargo build --release -p ootle-community-templates
+    && cargo build --release -p ootle-community-templates \
+    && rm -f target/release/ootle-community-templates target/release/deps/ootle_community_templates-*
 
 # Copy source and build final binary
 COPY server/src/ server/src/

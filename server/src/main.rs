@@ -9,7 +9,7 @@ use std::sync::Arc;
 use clap::Parser;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{api::AppState, config::Cli};
 
@@ -81,7 +81,10 @@ async fn main() -> anyhow::Result<()> {
     let state = Arc::new(AppState { pool, jwt_secret });
 
     // Build router: API routes + static file serving for the frontend
-    let app = api::router(state).fallback_service(ServeDir::new("static"));
+    // ServeDir::new_with_fallback serves static assets normally, but falls back to
+    // index.html for any path that doesn't match a file on disk, enabling SPA client-side routing.
+    let serve_dir = ServeDir::new("static").not_found_service(ServeFile::new("static/index.html"));
+    let app = api::router(state).fallback_service(serve_dir);
 
     let bind = format!("{}:{}", config.server.bind_address, config.server.port);
     tracing::info!("Starting server on {bind}");

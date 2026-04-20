@@ -1,5 +1,5 @@
 # Stage 1: Build the Rust backend
-FROM rust:1.94 AS rust-builder
+FROM rust:1.95-trixie AS rust-builder
 WORKDIR /build
 
 # Copy manifests to cache dependencies
@@ -16,7 +16,7 @@ COPY migrations/ migrations/
 RUN cargo build --release -p ootle-community-templates
 
 # Stage 2: Build the frontend
-FROM node:22-alpine AS web-builder
+FROM node:24-alpine AS web-builder
 WORKDIR /build
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -24,7 +24,7 @@ COPY web/ .
 RUN npm run build
 
 # Stage 3: Final image
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=rust-builder /build/target/release/ootle-community-templates ./

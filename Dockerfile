@@ -18,6 +18,7 @@ RUN cargo build --release -p ootle-community-templates
 
 # Stage 2: Build the frontend
 FROM node:24-alpine AS web-builder
+ENV VITE_BASE_PATH=/ootle/community-templates
 WORKDIR /build
 COPY web/package.json web/package-lock.json ./
 RUN npm ci

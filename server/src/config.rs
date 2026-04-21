@@ -51,6 +51,10 @@ pub struct Cli {
     /// Network to use for default indexer URL
     #[arg(long, value_enum)]
     pub network: Option<Network>,
+
+    /// URL base path for all routes, e.g. /ootle/community-templates (overrides BASE_PATH env var and config)
+    #[arg(long)]
+    pub base_path: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -70,10 +74,14 @@ pub struct ServerConfig {
     pub bind_address: String,
     #[serde(default = "default_port")]
     pub port: u16,
-    /// JWT secret for admin auth. If not set, a random secret is generated on each startup
+        /// JWT secret for admin auth. If not set, a random secret is generated on each startup
     /// (all existing JWTs are invalidated on restart).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwt_secret: Option<String>,
+    /// URL base path prefix for all routes and static assets, e.g. `/ootle/community-templates`.
+    /// Defaults to `/` (no prefix). Can be overridden by the BASE_PATH env var or --base-path flag.
+    #[serde(default = "default_base_path", skip_serializing_if = "is_default_base_path")]
+    pub base_path: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -105,6 +113,7 @@ impl Default for ServerConfig {
             bind_address: default_bind_address(),
             port: default_port(),
             jwt_secret: None,
+            base_path: default_base_path(),
         }
     }
 }
@@ -164,6 +173,15 @@ impl Config {
         }
         if let Some(ref url) = cli.indexer_url {
             config.indexer.url = Some(url.clone());
+        }
+
+        // Base path: CLI flag > BASE_PATH env var > config file > default "/"
+        if let Some(ref path) = cli.base_path {
+            config.server.base_path = normalize_base_path(path);
+        } else if is_default_base_path(&config.server.base_path) {
+            if let Ok(path) = std::env::var("BASE_PATH") {
+                config.server.base_path = normalize_base_path(&path);
+            }
         }
 
         Ok(config)
@@ -252,6 +270,29 @@ fn default_admin_username() -> String {
 
 fn default_admin_password() -> String {
     "change-me".to_string()
+}
+
+fn default_base_path() -> String {
+    "/".to_string()
+}
+
+fn is_default_base_path(s: &str) -> bool {
+    s == "/"
+}
+
+/// Normalise a base path: ensure it starts with `/` and has no trailing slash.
+/// `""` and `"/"` both map to `"/"` (root, no prefix).
+pub fn normalize_base_path(s: &str) -> String {
+    let s = s.trim();
+    if s.is_empty() || s == "/" {
+        return "/".to_string();
+    }
+    let s = if s.starts_with('/') {
+        s.to_string()
+    } else {
+        format!("/{s}")
+    };
+    s.trim_end_matches('/').to_string()
 }
 
 #[derive(Debug, thiserror::Error)]

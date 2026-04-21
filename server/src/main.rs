@@ -9,7 +9,10 @@ use std::sync::Arc;
 use clap::Parser;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 use crate::{api::AppState, config::Cli};
 
@@ -80,11 +83,29 @@ async fn main() -> anyhow::Result<()> {
 
     let state = Arc::new(AppState { pool, jwt_secret });
 
-    // Build router: API routes + static file serving for the frontend
-    // ServeDir::new_with_fallback serves static assets normally, but falls back to
-    // index.html for any path that doesn't match a file on disk, enabling SPA client-side routing.
-    let serve_dir = ServeDir::new("static").not_found_service(ServeFile::new("static/index.html"));
-    let app = api::router(state).fallback_service(serve_dir);
+    let base_path = config.server.base_path.clone();
+    tracing::info!("Using base path: {base_path}");
+
+    // Build router: API routes + static file serving for the frontend.
+    // ServeDir serves real static files. not_found_service uses ServeFile to
+    // serve index.html for any unmatched path (SPA client-side routes), so the
+    // SPA boots and React Router renders the correct page.
+    // not_found_service is required here (not router-level fallback) because
+    // nest_service hands off to ServeDir internally — 404s from ServeDir never
+    // bubble back up to the router.
+    // When base_path is "/" serve everything from root (no prefix).
+    // Otherwise nest_service strips the prefix before handing off to ServeDir,
+    // so /ootle/community-templates/assets/foo.css resolves to static/assets/foo.css.
+    // Use fallback() not not_found_service(): the latter wraps with SetStatus(404)
+    // which breaks SPA deep-link navigation. fallback() preserves ServeFile's
+    // natural 200 response for index.html.
+    let serve_dir = ServeDir::new("static").fallback(ServeFile::new("static/index.html"));
+    let app = if config.server.base_path == "/" {
+        api::router(state, &config.server.base_path).fallback_service(serve_dir)
+    } else {
+        api::router(state, &config.server.base_path).nest_service(&config.server.base_path, serve_dir)
+    }
+    .layer(TraceLayer::new_for_http());
 
     let bind = format!("{}:{}", config.server.bind_address, config.server.port);
     tracing::info!("Starting server on {bind}");

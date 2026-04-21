@@ -16,7 +16,7 @@ pub struct AppState {
     pub jwt_secret: Vec<u8>,
 }
 
-pub fn router(state: Arc<AppState>) -> Router {
+pub fn router(state: Arc<AppState>, base_path: &str) -> Router {
     let public = Router::new()
         .merge(templates::routes())
         .merge(search::routes())
@@ -37,9 +37,18 @@ pub fn router(state: Arc<AppState>) -> Router {
             auth::jwt_middleware,
         ));
 
+    // Nest API routes under {base_path}/api. When base_path is "/" the prefix
+    // collapses to just "/api", preserving backwards-compatible behaviour.
+    let api_prefix = if base_path == "/" {
+        "/api".to_string()
+    } else {
+        format!("{base_path}/api")
+    };
+    let admin_prefix = format!("{api_prefix}/admin");
+
     Router::new()
-        .nest("/api", public)
-        .nest("/api", metadata_routes)
-        .nest("/api/admin", admin)
+        .nest(&api_prefix, public)
+        .nest(&api_prefix, metadata_routes)
+        .nest(&admin_prefix, admin)
         .with_state(state)
 }

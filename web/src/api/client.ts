@@ -1,4 +1,7 @@
-const API_BASE = "/api";
+// When served via the Next.js proxy at tari.com/ootle/community-templates,
+// API calls must include the full subpath prefix so the browser sends them to
+// the right origin-relative URL. VITE_API_BASE can override this for local dev.
+const API_BASE = import.meta.env.VITE_API_BASE ?? "/ootle/community-templates/api";
 
 export interface TemplateResponse {
   template_address: string;
@@ -126,7 +129,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (!resp.ok) {
     if (resp.status === 401) {
       localStorage.removeItem("admin_token");
-      window.location.href = "/admin/login";
+      window.location.href = "/ootle/community-templates/admin/login";
       throw new Error("Session expired");
     }
     const body = await resp.json().catch(() => ({ error: resp.statusText }));

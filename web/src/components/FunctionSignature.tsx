@@ -9,15 +9,23 @@ function formatType(t: TypeDef): string {
   return "?";
 }
 
+function isMethod(f: FunctionDef): boolean {
+  return f.arguments.length > 0 && f.arguments[0].name === "self";
+}
+
 function isConstructor(f: FunctionDef): boolean {
-  // Constructors don't have &self or &mut self as the first argument
-  if (f.arguments.length === 0) return true;
-  const first = f.arguments[0].name;
-  return first !== "self";
+  // A non-method is only a constructor if it returns Self or Component<...>.
+  // Anything else is a plain associated function.
+  if (isMethod(f)) return false;
+  const out = f.output;
+  if (typeof out !== "object" || !("Other" in out)) return false;
+  const name = out.Other.name;
+  return name === "Self" || name.startsWith("Component<");
 }
 
 export default function FunctionSignature({ func }: { func: FunctionDef }) {
   const isCtor = isConstructor(func);
+  const isMeth = isMethod(func);
 
   return (
     <div
@@ -33,8 +41,9 @@ export default function FunctionSignature({ func }: { func: FunctionDef }) {
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
         {isCtor && <span className="badge badge--green">constructor</span>}
-        {!isCtor && func.is_mut && <span className="badge badge--purple">mut</span>}
-        {!isCtor && !func.is_mut && <span className="badge badge--muted">read</span>}
+        {isMeth && func.is_mut && <span className="badge badge--purple">mut</span>}
+        {isMeth && !func.is_mut && <span className="badge badge--muted">read</span>}
+        {!isCtor && !isMeth && <span className="badge badge--muted">fn</span>}
         <span style={{ color: "var(--color-purple)", fontWeight: 600 }}>
           {func.name}
         </span>

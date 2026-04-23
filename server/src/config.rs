@@ -74,13 +74,16 @@ pub struct ServerConfig {
     pub bind_address: String,
     #[serde(default = "default_port")]
     pub port: u16,
-        /// JWT secret for admin auth. If not set, a random secret is generated on each startup
+    /// JWT secret for admin auth. If not set, a random secret is generated on each startup
     /// (all existing JWTs are invalidated on restart).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwt_secret: Option<String>,
     /// URL base path prefix for all routes and static assets, e.g. `/ootle/community-templates`.
     /// Defaults to `/` (no prefix). Can be overridden by the BASE_PATH env var or --base-path flag.
-    #[serde(default = "default_base_path", skip_serializing_if = "is_default_base_path")]
+    #[serde(
+        default = "default_base_path",
+        skip_serializing_if = "is_default_base_path"
+    )]
     pub base_path: String,
 }
 

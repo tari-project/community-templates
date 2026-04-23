@@ -103,7 +103,8 @@ async fn main() -> anyhow::Result<()> {
     let app = if config.server.base_path == "/" {
         api::router(state, &config.server.base_path).fallback_service(serve_dir)
     } else {
-        api::router(state, &config.server.base_path).nest_service(&config.server.base_path, serve_dir)
+        api::router(state, &config.server.base_path)
+            .nest_service(&config.server.base_path, serve_dir)
     }
     .layer(TraceLayer::new_for_http());
 

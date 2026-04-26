@@ -1,0 +1,8 @@
+[advisories]
+ignore = [
+    # RUSTSEC-2023-0071: Marvin Attack timing sidechannel in `rsa`.
+    # No upstream fix; pulled in transitively via sqlx 0.8 -> sqlx-mysql even
+    # though this project only uses the sqlite driver. sqlx 0.8 hard-depends
+    # on sqlx-mysql, so the dep cannot be feature-gated out.
+    "RUSTSEC-2023-0071",
+]

@@ -11,8 +11,9 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
 use tower_http::{
     services::{ServeDir, ServeFile},
-    trace::TraceLayer,
+    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
+use tracing::Level;
 
 use crate::{api::AppState, config::Cli};
 
@@ -106,7 +107,11 @@ async fn main() -> anyhow::Result<()> {
         api::router(state, &config.server.base_path)
             .nest_service(&config.server.base_path, serve_dir)
     }
-    .layer(TraceLayer::new_for_http());
+    .layer(
+        TraceLayer::new_for_http()
+            .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+            .on_response(DefaultOnResponse::new().level(Level::INFO)),
+    );
 
     let bind = format!("{}:{}", config.server.bind_address, config.server.port);
     tracing::info!("Starting server on {bind}");

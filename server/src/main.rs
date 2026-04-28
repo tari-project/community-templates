@@ -101,17 +101,16 @@ async fn main() -> anyhow::Result<()> {
     // which breaks SPA deep-link navigation. fallback() preserves ServeFile's
     // natural 200 response for index.html.
     let serve_dir = ServeDir::new("static").fallback(ServeFile::new("static/index.html"));
-    let app = if config.server.base_path == "/" {
-        api::router(state, &config.server.base_path).fallback_service(serve_dir)
-    } else {
-        api::router(state, &config.server.base_path)
-            .nest_service(&config.server.base_path, serve_dir)
-    }
-    .layer(
+    let api_router = api::router(state, &config.server.base_path).layer(
         TraceLayer::new_for_http()
             .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
             .on_response(DefaultOnResponse::new().level(Level::INFO)),
     );
+    let app = if config.server.base_path == "/" {
+        api_router.fallback_service(serve_dir)
+    } else {
+        api_router.nest_service(&config.server.base_path, serve_dir)
+    };
 
     let bind = format!("{}:{}", config.server.bind_address, config.server.port);
     tracing::info!("Starting server on {bind}");

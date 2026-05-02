@@ -74,15 +74,35 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    // Shared coordination primitives between the sync loop and the admin
+    // reindex handler. The mutex serialises wipes against in-flight sync
+    // passes; the notify lets the reindex handler wake the loop immediately.
+    let sync_lock = Arc::new(tokio::sync::Mutex::new(()));
+    let reindex_notify = Arc::new(tokio::sync::Notify::new());
+
     // Start indexer sync background task
     let sync_pool = pool.clone();
     let sync_config = config.indexer.clone();
     let sync_indexer_url = indexer_url.clone();
+    let sync_lock_for_loop = sync_lock.clone();
+    let reindex_notify_for_loop = reindex_notify.clone();
     tokio::spawn(async move {
-        sync::indexer::run_sync_loop(sync_pool, sync_config, sync_indexer_url).await;
+        sync::indexer::run_sync_loop(
+            sync_pool,
+            sync_config,
+            sync_indexer_url,
+            sync_lock_for_loop,
+            reindex_notify_for_loop,
+        )
+        .await;
     });
 
-    let state = Arc::new(AppState { pool, jwt_secret });
+    let state = Arc::new(AppState {
+        pool,
+        jwt_secret,
+        sync_lock,
+        reindex_notify,
+    });
 
     let base_path = config.server.base_path.clone();
     tracing::info!("Using base path: {base_path}");

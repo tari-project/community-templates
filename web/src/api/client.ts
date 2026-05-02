@@ -118,6 +118,12 @@ export interface AdminUser {
   created_at: string;
 }
 
+export interface ReindexResponse {
+  ok: boolean;
+  deleted_templates: number;
+  deleted_metadata: number;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -232,5 +238,8 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ new_password }),
       }),
+
+    reindex: () =>
+      request<ReindexResponse>("/admin/reindex", { method: "POST" }),
   },
 };

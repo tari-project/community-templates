@@ -23,6 +23,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/admins", post(create_admin))
         .route("/admins/{id}", delete(delete_admin))
         .route("/admins/{id}/password", put(change_password))
+        .route("/reindex", post(reindex))
 }
 
 #[derive(Debug, Serialize)]
@@ -194,4 +195,78 @@ async fn change_password(
         return Err(AppError::not_found("Admin not found"));
     }
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReindexResponse {
+    pub ok: bool,
+    pub deleted_templates: i64,
+    pub deleted_metadata: i64,
+}
+
+/// Wipe all indexed template data and the sync cursor, then wake the sync loop
+/// so it re-pulls the catalogue from scratch.
+///
+/// Preserved across the wipe:
+///   - `admins` (admin user accounts and credentials)
+///   - `template_curation` (featured / blacklist flags) — these re-attach to
+///     templates as they reappear from the indexer.
+///
+/// Serialised against the indexer sync task via `state.sync_lock` so a wipe
+/// can never race with a partial write.
+async fn reindex(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ReindexResponse>, AppError> {
+    tracing::warn!("Admin triggered database reindex: wiping templates and sync cursor");
+
+    let _guard = state.sync_lock.lock().await;
+
+    let mut tx = state.pool.begin().await?;
+
+    // Order matters: template_metadata.template_address has a FK to templates.
+    // SQLite doesn't enforce FKs by default in this codebase, but deleting
+    // children first keeps things correct if PRAGMA foreign_keys is ever turned on.
+    let metadata_deleted = sqlx::query("DELETE FROM template_metadata")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete template_metadata: {e}");
+            AppError::internal("Failed to wipe template metadata")
+        })?
+        .rows_affected() as i64;
+
+    let templates_deleted = sqlx::query("DELETE FROM templates")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete templates: {e}");
+            AppError::internal("Failed to wipe templates")
+        })?
+        .rows_affected() as i64;
+
+    sqlx::query("DELETE FROM sync_state")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete sync_state: {e}");
+            AppError::internal("Failed to wipe sync state")
+        })?;
+
+    tx.commit().await?;
+
+    tracing::info!(
+        "Reindex wipe complete: removed {} templates and {} metadata rows. Notifying sync loop.",
+        templates_deleted,
+        metadata_deleted
+    );
+
+    // Drop the lock before notifying so the loop can immediately acquire it.
+    drop(_guard);
+    state.reindex_notify.notify_one();
+
+    Ok(Json(ReindexResponse {
+        ok: true,
+        deleted_templates: templates_deleted,
+        deleted_metadata: metadata_deleted,
+    }))
 }

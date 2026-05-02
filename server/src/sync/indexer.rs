@@ -1,8 +1,10 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use tari_engine_types::published_template::PublishedTemplateAddress;
+use tokio::sync::{Mutex, Notify};
 
 use crate::{config::IndexerConfig, db};
 
@@ -30,7 +32,13 @@ struct TemplateDefinitionResponse {
     code_size: usize,
 }
 
-pub async fn run_sync_loop(pool: SqlitePool, config: IndexerConfig, indexer_url: String) {
+pub async fn run_sync_loop(
+    pool: SqlitePool,
+    config: IndexerConfig,
+    indexer_url: String,
+    sync_lock: Arc<Mutex<()>>,
+    reindex_notify: Arc<Notify>,
+) {
     let client = reqwest::Client::new();
     let interval = Duration::from_secs(config.sync_interval_secs);
 
@@ -41,10 +49,23 @@ pub async fn run_sync_loop(pool: SqlitePool, config: IndexerConfig, indexer_url:
     );
 
     loop {
-        if let Err(e) = sync_once(&pool, &client, &indexer_url).await {
-            tracing::error!("Indexer sync error: {e}");
+        {
+            // Hold the lock only for the duration of the sync pass so the admin
+            // reindex handler can claim it during the sleep below.
+            let _guard = sync_lock.lock().await;
+            if let Err(e) = sync_once(&pool, &client, &indexer_url).await {
+                tracing::error!("Indexer sync error: {e}");
+            }
         }
-        tokio::time::sleep(interval).await;
+
+        // Sleep until the next tick OR until a reindex notifies us, whichever
+        // comes first.
+        tokio::select! {
+            _ = tokio::time::sleep(interval) => {}
+            _ = reindex_notify.notified() => {
+                tracing::info!("Reindex requested, running sync immediately");
+            }
+        }
     }
 }
 

@@ -214,9 +214,7 @@ pub struct ReindexResponse {
 ///
 /// Serialised against the indexer sync task via `state.sync_lock` so a wipe
 /// can never race with a partial write.
-async fn reindex(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<ReindexResponse>, AppError> {
+async fn reindex(State(state): State<Arc<AppState>>) -> Result<Json<ReindexResponse>, AppError> {
     tracing::warn!("Admin triggered database reindex: wiping templates and sync cursor");
 
     let _guard = state.sync_lock.lock().await;

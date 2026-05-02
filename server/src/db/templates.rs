@@ -396,7 +396,7 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<TemplateStats, sqlx::Error> 
         r#"
         SELECT
             COUNT(*),
-            SUM(CASE WHEN definition IS NOT NULL THEN 1 ELSE 0 END)
+            COUNT(definition)
         FROM templates
         "#,
     )
@@ -409,15 +409,14 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<TemplateStats, sqlx::Error> 
     let (featured, blacklisted): (i64, i64) = sqlx::query_as(
         r#"
         SELECT
-            SUM(CASE WHEN c.is_featured = 1 THEN 1 ELSE 0 END),
-            SUM(CASE WHEN c.is_blacklisted = 1 THEN 1 ELSE 0 END)
+            COALESCE(SUM(c.is_featured), 0),
+            COALESCE(SUM(c.is_blacklisted), 0)
         FROM template_curation c
         INNER JOIN templates t ON c.template_address = t.template_address
         "#,
     )
     .fetch_one(pool)
-    .await
-    .map(|(f, b): (Option<i64>, Option<i64>)| (f.unwrap_or(0), b.unwrap_or(0)))?;
+    .await?;
 
     let (with_metadata,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM template_metadata")
         .fetch_one(pool)

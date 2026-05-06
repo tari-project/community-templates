@@ -8,12 +8,20 @@ use std::sync::Arc;
 
 use axum::{http::Method, middleware, Router};
 use sqlx::SqlitePool;
+use tokio::sync::{Mutex, Notify};
 use tower_http::cors::{Any, CorsLayer};
 
 pub struct AppState {
     pub pool: SqlitePool,
     /// Resolved JWT secret bytes (random if not configured, stable for the lifetime of the process).
     pub jwt_secret: Vec<u8>,
+    /// Held by the indexer sync task while a sync pass is in flight, and by the
+    /// admin reindex handler while it wipes the database. Guarantees the wipe
+    /// can never race a partial write.
+    pub sync_lock: Arc<Mutex<()>>,
+    /// Pulsed after a wipe to wake the sync loop immediately rather than
+    /// waiting up to `sync_interval_secs`.
+    pub reindex_notify: Arc<Notify>,
 }
 
 pub fn router(state: Arc<AppState>, base_path: &str) -> Router {

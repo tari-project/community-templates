@@ -87,10 +87,36 @@ pub async fn get_template(
     pool: &SqlitePool,
     addr: &PublishedTemplateAddress,
 ) -> Result<Option<TemplateRow>, sqlx::Error> {
-    sqlx::query_as::<_, TemplateRow>("SELECT * FROM templates WHERE template_address = ?")
-        .bind(canonical_addr(addr))
-        .fetch_optional(pool)
-        .await
+    sqlx::query_as::<_, TemplateRow>(
+        r#"
+        SELECT
+            t.template_address, t.template_name, t.author_public_key, t.binary_hash,
+            t.at_epoch, t.metadata_hash, t.definition, t.code_size,
+            COALESCE(c.is_blacklisted, 0) AS is_blacklisted,
+            COALESCE(c.is_featured, 0) AS is_featured,
+            c.feature_order AS feature_order,
+            t.created_at, t.updated_at
+        FROM templates t
+        LEFT JOIN template_curation c ON t.template_address = c.template_address
+        WHERE t.template_address = ?
+        "#,
+    )
+    .bind(canonical_addr(addr))
+    .fetch_optional(pool)
+    .await
+}
+
+/// Returns true if a template row exists with the given address.
+pub async fn template_exists(
+    pool: &SqlitePool,
+    addr: &PublishedTemplateAddress,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<(i64,)> =
+        sqlx::query_as("SELECT 1 FROM templates WHERE template_address = ? LIMIT 1")
+            .bind(canonical_addr(addr))
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.is_some())
 }
 
 pub async fn list_featured_with_metadata(
@@ -101,7 +127,10 @@ pub async fn list_featured_with_metadata(
         SELECT
             t.template_address, t.template_name, t.author_public_key, t.binary_hash,
             t.at_epoch, t.metadata_hash, t.definition, t.code_size,
-            t.is_blacklisted, t.is_featured, t.feature_order, t.created_at, t.updated_at,
+            COALESCE(c.is_blacklisted, 0) AS is_blacklisted,
+            COALESCE(c.is_featured, 0) AS is_featured,
+            c.feature_order AS feature_order,
+            t.created_at, t.updated_at,
             m.name AS meta_name, m.version AS meta_version, m.description AS meta_description,
             m.tags AS meta_tags, m.category AS meta_category, m.logo_url AS meta_logo_url,
             m.repository AS meta_repository, m.documentation AS meta_documentation,
@@ -110,8 +139,9 @@ pub async fn list_featured_with_metadata(
             m.extra AS meta_extra
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
-        WHERE t.is_featured = 1 AND t.is_blacklisted = 0
-        ORDER BY t.feature_order ASC NULLS LAST, t.template_name ASC
+        INNER JOIN template_curation c ON t.template_address = c.template_address
+        WHERE c.is_featured = 1 AND c.is_blacklisted = 0
+        ORDER BY c.feature_order ASC NULLS LAST, t.template_name ASC
         "#,
     )
     .fetch_all(pool)
@@ -134,7 +164,10 @@ pub async fn search_templates(
         SELECT
             t.template_address, t.template_name, t.author_public_key, t.binary_hash,
             t.at_epoch, t.metadata_hash, t.definition, t.code_size,
-            t.is_blacklisted, t.is_featured, t.feature_order, t.created_at, t.updated_at,
+            COALESCE(c.is_blacklisted, 0) AS is_blacklisted,
+            COALESCE(c.is_featured, 0) AS is_featured,
+            c.feature_order AS feature_order,
+            t.created_at, t.updated_at,
             m.name AS meta_name, m.version AS meta_version, m.description AS meta_description,
             m.tags AS meta_tags, m.category AS meta_category, m.logo_url AS meta_logo_url,
             m.repository AS meta_repository, m.documentation AS meta_documentation,
@@ -143,7 +176,8 @@ pub async fn search_templates(
             m.extra AS meta_extra
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
-        WHERE t.is_blacklisted = 0
+        LEFT JOIN template_curation c ON t.template_address = c.template_address
+        WHERE COALESCE(c.is_blacklisted, 0) = 0
         "#,
     );
 
@@ -255,21 +289,41 @@ impl TemplateWithMetadataRow {
 }
 
 // Admin queries
+//
+// Curation lives in `template_curation` (see migration 003), so these helpers
+// upsert there instead of mutating `templates`. They first check that the
+// template exists, returning `Ok(false)` if not — this preserves the 404 the
+// admin API used to emit when the template was missing.
+//
+// Upserts (rather than UPDATEs) mean a curation row is created on first flag,
+// which is what we want: the row is the persistent record that survives a
+// reindex wipe.
+
 pub async fn set_featured(
     pool: &SqlitePool,
     addr: &PublishedTemplateAddress,
     featured: bool,
     order: Option<i32>,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE templates SET is_featured = ?, feature_order = ?, updated_at = datetime('now') WHERE template_address = ?",
+    if !template_exists(pool, addr).await? {
+        return Ok(false);
+    }
+    sqlx::query(
+        r#"
+        INSERT INTO template_curation (template_address, is_featured, feature_order)
+        VALUES (?, ?, ?)
+        ON CONFLICT (template_address) DO UPDATE SET
+            is_featured = excluded.is_featured,
+            feature_order = excluded.feature_order,
+            updated_at = datetime('now')
+        "#,
     )
+    .bind(canonical_addr(addr))
     .bind(featured)
     .bind(order)
-    .bind(canonical_addr(addr))
     .execute(pool)
     .await?;
-    Ok(result.rows_affected() > 0)
+    Ok(true)
 }
 
 pub async fn set_blacklisted(
@@ -277,14 +331,23 @@ pub async fn set_blacklisted(
     addr: &PublishedTemplateAddress,
     blacklisted: bool,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE templates SET is_blacklisted = ?, updated_at = datetime('now') WHERE template_address = ?",
+    if !template_exists(pool, addr).await? {
+        return Ok(false);
+    }
+    sqlx::query(
+        r#"
+        INSERT INTO template_curation (template_address, is_blacklisted)
+        VALUES (?, ?)
+        ON CONFLICT (template_address) DO UPDATE SET
+            is_blacklisted = excluded.is_blacklisted,
+            updated_at = datetime('now')
+        "#,
     )
-    .bind(blacklisted)
     .bind(canonical_addr(addr))
+    .bind(blacklisted)
     .execute(pool)
     .await?;
-    Ok(result.rows_affected() > 0)
+    Ok(true)
 }
 
 pub async fn list_all_admin(
@@ -297,7 +360,10 @@ pub async fn list_all_admin(
         SELECT
             t.template_address, t.template_name, t.author_public_key, t.binary_hash,
             t.at_epoch, t.metadata_hash, t.definition, t.code_size,
-            t.is_blacklisted, t.is_featured, t.feature_order, t.created_at, t.updated_at,
+            COALESCE(c.is_blacklisted, 0) AS is_blacklisted,
+            COALESCE(c.is_featured, 0) AS is_featured,
+            c.feature_order AS feature_order,
+            t.created_at, t.updated_at,
             m.name AS meta_name, m.version AS meta_version, m.description AS meta_description,
             m.tags AS meta_tags, m.category AS meta_category, m.logo_url AS meta_logo_url,
             m.repository AS meta_repository, m.documentation AS meta_documentation,
@@ -306,6 +372,7 @@ pub async fn list_all_admin(
             m.extra AS meta_extra
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
+        LEFT JOIN template_curation c ON t.template_address = c.template_address
         ORDER BY t.at_epoch DESC
         LIMIT ? OFFSET ?
         "#,
@@ -325,14 +392,27 @@ pub struct TemplateStats {
 }
 
 pub async fn get_stats(pool: &SqlitePool) -> Result<TemplateStats, sqlx::Error> {
-    let row: (i64, i64, i64, i64) = sqlx::query_as(
+    let (total_templates, with_definition): (i64, i64) = sqlx::query_as(
         r#"
         SELECT
             COUNT(*),
-            SUM(CASE WHEN definition IS NOT NULL THEN 1 ELSE 0 END),
-            SUM(CASE WHEN is_featured = 1 THEN 1 ELSE 0 END),
-            SUM(CASE WHEN is_blacklisted = 1 THEN 1 ELSE 0 END)
+            COUNT(definition)
         FROM templates
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    // Curation counts come from template_curation. Only count rows whose
+    // template still exists; orphan curation rows (templates the indexer
+    // dropped) shouldn't inflate the visible numbers.
+    let (featured, blacklisted): (i64, i64) = sqlx::query_as(
+        r#"
+        SELECT
+            COALESCE(SUM(c.is_featured), 0),
+            COALESCE(SUM(c.is_blacklisted), 0)
+        FROM template_curation c
+        INNER JOIN templates t ON c.template_address = t.template_address
         "#,
     )
     .fetch_one(pool)
@@ -343,21 +423,29 @@ pub async fn get_stats(pool: &SqlitePool) -> Result<TemplateStats, sqlx::Error> 
         .await?;
 
     Ok(TemplateStats {
-        total_templates: row.0,
-        with_definition: row.1,
-        featured: row.2,
-        blacklisted: row.3,
+        total_templates,
+        with_definition,
+        featured,
+        blacklisted,
         with_metadata,
     })
 }
 
 /// Get a batch of template addresses that still need their definition fetched.
+/// Skips blacklisted templates (no point fetching code we won't serve).
 pub async fn get_without_definition(
     pool: &SqlitePool,
     limit: i64,
 ) -> Result<Vec<String>, sqlx::Error> {
     let rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT template_address FROM templates WHERE definition IS NULL AND is_blacklisted = 0 LIMIT ?",
+        r#"
+        SELECT t.template_address
+        FROM templates t
+        LEFT JOIN template_curation c ON t.template_address = c.template_address
+        WHERE t.definition IS NULL
+          AND COALESCE(c.is_blacklisted, 0) = 0
+        LIMIT ?
+        "#,
     )
     .bind(limit)
     .fetch_all(pool)

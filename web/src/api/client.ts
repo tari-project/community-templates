@@ -31,6 +31,12 @@ export interface MetadataResponse {
   logo_url: string | null;
   commit_hash: string | null;
   supersedes: string | null;
+  functions: FunctionDoc[];
+}
+
+export interface FunctionDoc {
+  name: string;
+  doc: string;
 }
 
 export interface TemplateDef {

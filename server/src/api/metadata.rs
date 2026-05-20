@@ -17,7 +17,7 @@ use tari_ootle_template_metadata::{MetadataHash, TemplateMetadata};
 
 use super::AppState;
 use crate::{
-    db,
+    db::{self, metadata::FunctionDocRow},
     error::{parse_template_addr, AppError},
 };
 
@@ -54,6 +54,13 @@ pub struct MetadataJson {
     pub logo_url: Option<String>,
     pub commit_hash: Option<String>,
     pub supersedes: Option<String>,
+    pub functions: Vec<FunctionDocJson>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FunctionDocJson {
+    pub name: String,
+    pub doc: String,
 }
 
 /// Submit metadata verified against the on-chain metadata hash.
@@ -192,6 +199,14 @@ async fn store_metadata(
 ) -> Result<SubmitMetadataResponse, AppError> {
     let extra = serde_json::to_value(&metadata.extra)
         .map_err(|e| AppError::internal(format!("Failed to serialize extra metadata: {e}")))?;
+    let functions: Vec<FunctionDocRow> = metadata
+        .functions
+        .iter()
+        .map(|f| FunctionDocRow {
+            name: f.name.clone(),
+            doc: f.doc.clone(),
+        })
+        .collect();
     let new_metadata = db::metadata::NewMetadata {
         template_address: *addr,
         name: metadata.name.clone(),
@@ -209,6 +224,7 @@ async fn store_metadata(
         extra,
         schema_version: metadata.schema_version as i32,
         cbor_bytes: cbor_bytes.to_vec(),
+        functions: functions.clone(),
     };
     db::metadata::upsert_metadata(&state.pool, &new_metadata).await?;
 
@@ -228,6 +244,13 @@ async fn store_metadata(
             logo_url: metadata.logo_url.as_ref().and_then(safe_url_to_string),
             commit_hash: metadata.commit_hash.as_ref().map(|h| h.to_string()),
             supersedes: metadata.supersedes.as_ref().map(|a| a.to_string()),
+            functions: functions
+                .into_iter()
+                .map(|f| FunctionDocJson {
+                    name: f.name,
+                    doc: f.doc,
+                })
+                .collect(),
         },
     })
 }

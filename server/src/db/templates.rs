@@ -136,7 +136,7 @@ pub async fn list_featured_with_metadata(
             m.repository AS meta_repository, m.documentation AS meta_documentation,
             m.homepage AS meta_homepage, m.license AS meta_license,
             m.commit_hash AS meta_commit_hash, m.supersedes AS meta_supersedes,
-            m.extra AS meta_extra
+            m.extra AS meta_extra, m.functions_json AS meta_functions_json
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
         INNER JOIN template_curation c ON t.template_address = c.template_address
@@ -173,7 +173,7 @@ pub async fn search_templates(
             m.repository AS meta_repository, m.documentation AS meta_documentation,
             m.homepage AS meta_homepage, m.license AS meta_license,
             m.commit_hash AS meta_commit_hash, m.supersedes AS meta_supersedes,
-            m.extra AS meta_extra
+            m.extra AS meta_extra, m.functions_json AS meta_functions_json
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
         LEFT JOIN template_curation c ON t.template_address = c.template_address
@@ -269,6 +269,7 @@ pub struct TemplateWithMetadataRow {
     pub meta_commit_hash: Option<String>,
     pub meta_supersedes: Option<String>,
     pub meta_extra: Option<serde_json::Value>,
+    pub meta_functions_json: Option<String>,
 }
 
 impl TemplateWithMetadataRow {
@@ -285,6 +286,14 @@ impl TemplateWithMetadataRow {
         self.meta_tags
             .as_ref()
             .and_then(|t| serde_json::from_str(t).ok())
+    }
+
+    /// Parse meta_functions_json into Vec<FunctionDocRow>; empty when absent or malformed.
+    pub fn meta_functions(&self) -> Vec<super::metadata::FunctionDocRow> {
+        self.meta_functions_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default()
     }
 }
 

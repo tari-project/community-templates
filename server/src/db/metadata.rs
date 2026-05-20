@@ -26,15 +26,26 @@ pub struct MetadataRow {
     pub schema_version: i32,
     #[allow(dead_code)]
     pub cbor_bytes: Vec<u8>,
+    pub functions_json: String,
     #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
     #[allow(dead_code)]
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct FunctionDocRow {
+    pub name: String,
+    pub doc: String,
+}
+
 impl MetadataRow {
     pub fn tags(&self) -> Vec<String> {
         serde_json::from_str(&self.tags).unwrap_or_default()
+    }
+
+    pub fn functions(&self) -> Vec<FunctionDocRow> {
+        serde_json::from_str(&self.functions_json).unwrap_or_default()
     }
 }
 
@@ -55,18 +66,21 @@ pub struct NewMetadata {
     pub extra: serde_json::Value,
     pub schema_version: i32,
     pub cbor_bytes: Vec<u8>,
+    pub functions: Vec<FunctionDocRow>,
 }
 
 pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), sqlx::Error> {
     let tags_json = serde_json::to_string(&m.tags).unwrap_or_else(|_| "[]".to_string());
+    let functions_json = serde_json::to_string(&m.functions).unwrap_or_else(|_| "[]".to_string());
     sqlx::query(
         r#"
         INSERT INTO template_metadata (
             template_address, name, version, description, tags, category,
             repository, documentation, homepage, license, logo_url,
-            commit_hash, supersedes, extra, schema_version, cbor_bytes
+            commit_hash, supersedes, extra, schema_version, cbor_bytes,
+            functions_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (template_address) DO UPDATE SET
             name = EXCLUDED.name,
             version = EXCLUDED.version,
@@ -83,6 +97,7 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
             extra = EXCLUDED.extra,
             schema_version = EXCLUDED.schema_version,
             cbor_bytes = EXCLUDED.cbor_bytes,
+            functions_json = EXCLUDED.functions_json,
             updated_at = datetime('now')
         "#,
     )
@@ -102,6 +117,7 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
     .bind(&m.extra)
     .bind(m.schema_version)
     .bind(&m.cbor_bytes)
+    .bind(&functions_json)
     .execute(pool)
     .await?;
     Ok(())

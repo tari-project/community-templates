@@ -23,9 +23,16 @@ function isConstructor(f: FunctionDef): boolean {
   return name === "Self" || name.startsWith("Component<");
 }
 
-export default function FunctionSignature({ func }: { func: FunctionDef }) {
+export default function FunctionSignature({
+  func,
+  doc,
+}: {
+  func: FunctionDef;
+  doc?: string;
+}) {
   const isCtor = isConstructor(func);
   const isMeth = isMethod(func);
+  const trimmedDoc = doc?.trim();
 
   return (
     <div
@@ -71,6 +78,24 @@ export default function FunctionSignature({ func }: { func: FunctionDef }) {
           </span>
         )}
       </div>
+      {trimmedDoc && (
+        <pre
+          style={{
+            marginTop: "0.5rem",
+            marginBottom: 0,
+            padding: 0,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-muted)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.8rem",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {trimmedDoc}
+        </pre>
+      )}
     </div>
   );
 }

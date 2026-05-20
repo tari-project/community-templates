@@ -172,14 +172,17 @@ export default function TemplatePage() {
       </section>
 
       {/* Functions */}
-      {def && def.functions.length > 0 && (
-        <section>
-          <h2 style={{ marginBottom: "1rem" }}>Functions & Methods</h2>
-          {def.functions.map((f) => (
-            <FunctionSignature key={f.name} func={f} />
-          ))}
-        </section>
-      )}
+      {def && def.functions.length > 0 && (() => {
+        const docs = new Map((meta?.functions ?? []).map((f) => [f.name, f.doc]));
+        return (
+          <section>
+            <h2 style={{ marginBottom: "1rem" }}>Functions & Methods</h2>
+            {def.functions.map((f) => (
+              <FunctionSignature key={f.name} func={f} doc={docs.get(f.name)} />
+            ))}
+          </section>
+        );
+      })()}
     </div>
   );
 }

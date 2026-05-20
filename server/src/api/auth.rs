@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
-use argon2::{
-    password_hash::rand_core::OsRng, password_hash::SaltString, Argon2, PasswordHash,
-    PasswordHasher, PasswordVerifier,
-};
+use argon2::{password_hash::SaltString, Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::{
     body::Body, extract::State, http::Request, middleware::Next, response::Response, routing::post,
     Json, Router,
 };
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use super::AppState;
@@ -97,7 +95,12 @@ pub async fn jwt_middleware(
 }
 
 pub fn hash_password(password: &str) -> Result<String, AppError> {
-    let salt = SaltString::generate(&mut OsRng);
+    // password-hash's transitive rand_core 0.6 OsRng is feature-gated behind getrandom,
+    // which isn't activated in our resolved graph. Source entropy from rand 0.9 directly.
+    let mut salt_bytes = [0u8; 16];
+    rand::rng().fill_bytes(&mut salt_bytes);
+    let salt = SaltString::encode_b64(&salt_bytes)
+        .map_err(|e| AppError::internal(format!("Failed to encode salt: {e}")))?;
     let hash = Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .map_err(|e| AppError::internal(format!("Failed to hash password: {e}")))?;

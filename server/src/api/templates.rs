@@ -47,22 +47,7 @@ pub struct MetadataResponse {
     pub logo_url: Option<String>,
     pub commit_hash: Option<String>,
     pub supersedes: Option<String>,
-    pub functions: Vec<FunctionDocJson>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FunctionDocJson {
-    pub name: String,
-    pub doc: String,
-}
-
-impl From<db::metadata::FunctionDocRow> for FunctionDocJson {
-    fn from(f: db::metadata::FunctionDocRow) -> Self {
-        Self {
-            name: f.name,
-            doc: f.doc,
-        }
-    }
+    pub functions: Vec<db::metadata::FunctionDocRow>,
 }
 
 async fn get_featured(
@@ -108,11 +93,7 @@ fn to_template_response(
     let friendly_name = author_friendly_name(&metadata).map(str::to_string);
     let meta_resp = metadata.map(|m| {
         let tags = m.tags();
-        let functions = m
-            .functions()
-            .into_iter()
-            .map(FunctionDocJson::from)
-            .collect();
+        let functions = m.functions();
         MetadataResponse {
             name: m.name,
             version: m.version,
@@ -148,11 +129,7 @@ fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -
     let friendly_name = r.author_friendly_name().map(str::to_string);
     let has_metadata = r.meta_name.is_some();
     let meta_tags = r.meta_tags().unwrap_or_default();
-    let meta_functions = r
-        .meta_functions()
-        .into_iter()
-        .map(FunctionDocJson::from)
-        .collect();
+    let meta_functions = r.meta_functions();
     TemplateResponse {
         template_address: r.template_address,
         template_name: r.template_name,

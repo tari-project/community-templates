@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type TemplateResponse } from "../api/client";
 import SafeImage from "../components/SafeImage";
@@ -19,6 +19,11 @@ export default function TemplatePage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [addr]);
+
+  const functionDocs = useMemo(
+    () => new Map((template?.metadata?.functions ?? []).map((f) => [f.name, f.doc])),
+    [template?.metadata?.functions],
+  );
 
   if (loading) return <p style={{ color: "var(--text-muted)" }}>Loading...</p>;
   if (error) return <p style={{ color: "#e53e3e" }}>Error: {error}</p>;
@@ -172,17 +177,14 @@ export default function TemplatePage() {
       </section>
 
       {/* Functions */}
-      {def && def.functions.length > 0 && (() => {
-        const docs = new Map((meta?.functions ?? []).map((f) => [f.name, f.doc]));
-        return (
-          <section>
-            <h2 style={{ marginBottom: "1rem" }}>Functions & Methods</h2>
-            {def.functions.map((f) => (
-              <FunctionSignature key={f.name} func={f} doc={docs.get(f.name)} />
-            ))}
-          </section>
-        );
-      })()}
+      {def && def.functions.length > 0 && (
+        <section>
+          <h2 style={{ marginBottom: "1rem" }}>Functions & Methods</h2>
+          {def.functions.map((f) => (
+            <FunctionSignature key={f.name} func={f} doc={functionDocs.get(f.name)} />
+          ))}
+        </section>
+      )}
     </div>
   );
 }

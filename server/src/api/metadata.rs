@@ -54,13 +54,7 @@ pub struct MetadataJson {
     pub logo_url: Option<String>,
     pub commit_hash: Option<String>,
     pub supersedes: Option<String>,
-    pub functions: Vec<FunctionDocJson>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FunctionDocJson {
-    pub name: String,
-    pub doc: String,
+    pub functions: Vec<FunctionDocRow>,
 }
 
 /// Submit metadata verified against the on-chain metadata hash.
@@ -244,13 +238,7 @@ async fn store_metadata(
             logo_url: metadata.logo_url.as_ref().and_then(safe_url_to_string),
             commit_hash: metadata.commit_hash.as_ref().map(|h| h.to_string()),
             supersedes: metadata.supersedes.as_ref().map(|a| a.to_string()),
-            functions: functions
-                .into_iter()
-                .map(|f| FunctionDocJson {
-                    name: f.name,
-                    doc: f.doc,
-                })
-                .collect(),
+            functions,
         },
     })
 }

@@ -66,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Resolve the effective indexer URL and JWT secret
     let indexer_url = config.indexer_url().to_string();
-    let jwt_secret = config.jwt_secret();
+    let jwt_secret = config.jwt_secret()?;
     tracing::info!("Using indexer at {indexer_url}");
     if config.server.jwt_secret.is_none() {
         tracing::info!(

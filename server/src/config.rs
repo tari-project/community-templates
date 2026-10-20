@@ -199,10 +199,28 @@ impl Config {
     }
 
     /// Returns the effective JWT secret as bytes. If none is configured, generates random bytes.
-    pub fn jwt_secret(&self) -> Vec<u8> {
+    /// If configured, requires at least 32 bytes of key material to prevent offline brute-force.
+    pub fn jwt_secret(&self) -> Result<Vec<u8>, ConfigError> {
         match &self.server.jwt_secret {
-            Some(s) => s.as_bytes().to_vec(),
-            None => generate_random_secret(),
+            Some(s) => {
+                // If it's a valid hex string of >= 64 hex chars (32 bytes), decode it as hex bytes
+                let trimmed = s.trim();
+                let bytes = if trimmed.len() >= 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+                    hex::decode(trimmed).map_err(|e| ConfigError::InvalidJwtSecret(e.to_string()))?
+                } else {
+                    trimmed.as_bytes().to_vec()
+                };
+
+                if bytes.len() < 32 {
+                    return Err(ConfigError::InvalidJwtSecret(format!(
+                        "jwt_secret is too short ({} bytes). At least 32 bytes (256 bits) of entropy are required for HMAC-SHA256.",
+                        bytes.len()
+                    )));
+                }
+
+                Ok(bytes)
+            }
+            None => Ok(generate_random_secret()),
         }
     }
 
@@ -316,4 +334,40 @@ pub enum ConfigError {
     Parse(toml::de::Error),
     #[error("Failed to serialize config: {0}")]
     Serialize(toml::ser::Error),
+    #[error("Invalid jwt_secret configuration: {0}")]
+    InvalidJwtSecret(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jwt_secret_random_when_unset() {
+        let config = Config::default();
+        let secret = config.jwt_secret().unwrap();
+        assert_eq!(secret.len(), 32);
+    }
+
+    #[test]
+    fn test_jwt_secret_rejects_too_short() {
+        let mut config = Config::default();
+        config.server.jwt_secret = Some("short-secret".to_string());
+        assert!(config.jwt_secret().is_err());
+    }
+
+    #[test]
+    fn test_jwt_secret_accepts_hex_and_raw_32_bytes() {
+        let mut config = Config::default();
+        // 64 hex characters (32 bytes)
+        let sample_hex = "00".repeat(32);
+        config.server.jwt_secret = Some(sample_hex);
+        let secret = config.jwt_secret().unwrap();
+        assert_eq!(secret.len(), 32);
+
+        // 32 raw ASCII characters
+        config.server.jwt_secret = Some("sample_entropy_key_with_at_least_32_bytes!".to_string());
+        let secret2 = config.jwt_secret().unwrap();
+        assert!(secret2.len() >= 32);
+    }
 }

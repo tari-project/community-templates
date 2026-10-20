@@ -22,7 +22,8 @@ use crate::{
 };
 
 /// Domain separation label for author-signed metadata updates.
-const SIGNED_METADATA_DOMAIN: &[u8] = b"com.tari.ootle.community.SignedMetadataUpdate";
+const SIGNED_METADATA_DOMAIN_V1: &[u8] = b"com.tari.ootle.community.SignedMetadataUpdate";
+const SIGNED_METADATA_DOMAIN_V2: &[u8] = b"com.tari.ootle.community.SignedMetadataUpdate.v2";
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -94,7 +95,7 @@ async fn submit_metadata(
         ));
     }
 
-    let resp = store_metadata(&state, &addr, &metadata, &body).await?;
+    let resp = store_metadata(&state, &addr, &metadata, &body, None).await?;
     Ok(Json(resp))
 }
 
@@ -107,6 +108,8 @@ struct SignedMetadataRequest {
     public_nonce: String,
     /// Schnorr signature scalar s (hex, 32 bytes)
     signature: String,
+    /// Monotonic sequence counter for replay and rollback prevention (#25).
+    pub sequence: Option<i64>,
 }
 
 /// Submit metadata verified by the author's Schnorr signature.
@@ -134,12 +137,25 @@ async fn submit_signed_metadata(
     let metadata = TemplateMetadata::from_cbor(&cbor_bytes)
         .map_err(|e| AppError::bad_request(format!("Invalid CBOR metadata: {e}")))?;
 
+    let existing_meta = db::metadata::get_metadata(&state.pool, &addr).await?;
+
     // Validate immutable fields haven't changed (if existing metadata is present)
-    if let Some(existing) = db::metadata::get_metadata(&state.pool, &addr).await? {
+    if let Some(ref existing) = existing_meta {
         if metadata.name != existing.name {
             return Err(AppError::bad_request(format!(
                 "Field 'name' is immutable (was '{}', got '{}')",
                 existing.name, metadata.name
+            )));
+        }
+    }
+
+    // Monotonic sequence verification for rollback protection (#25)
+    let current_seq = existing_meta.as_ref().map(|m| m.last_signed_sequence).unwrap_or(0);
+    if let Some(req_seq) = req.sequence {
+        if req_seq <= current_seq {
+            return Err(AppError::bad_request(format!(
+                "Sequence number must be strictly greater than last accepted sequence (last: {}, got: {})",
+                current_seq, req_seq
             )));
         }
     }
@@ -162,21 +178,40 @@ async fn submit_signed_metadata(
 
     let schnorr = RistrettoSchnorr::new(nonce, sig_scalar);
 
-    // Challenge = Blake2b-512(domain || nonce || public_key || template_address_bytes || cbor)
+    // Challenge calculation:
+    // If sequence is provided, use V2 domain with sequence in the challenge.
+    // If sequence is omitted, fallback to legacy V1 domain only if no sequence has been established yet.
     let addr_bytes = addr.as_ref();
-    let challenge = Blake2b512::new()
-        .chain_update(SIGNED_METADATA_DOMAIN)
-        .chain_update(&nonce_bytes)
-        .chain_update(&author_pk_bytes)
-        .chain_update(addr_bytes)
-        .chain_update(&cbor_bytes)
-        .finalize();
+    let challenge = if let Some(seq) = req.sequence {
+        let seq_bytes = seq.to_be_bytes();
+        Blake2b512::new()
+            .chain_update(SIGNED_METADATA_DOMAIN_V2)
+            .chain_update(&nonce_bytes)
+            .chain_update(&author_pk_bytes)
+            .chain_update(addr_bytes)
+            .chain_update(&cbor_bytes)
+            .chain_update(&seq_bytes)
+            .finalize()
+    } else {
+        if current_seq > 0 {
+            return Err(AppError::bad_request(
+                "A sequence number is required for signed metadata updates once established",
+            ));
+        }
+        Blake2b512::new()
+            .chain_update(SIGNED_METADATA_DOMAIN_V1)
+            .chain_update(&nonce_bytes)
+            .chain_update(&author_pk_bytes)
+            .chain_update(addr_bytes)
+            .chain_update(&cbor_bytes)
+            .finalize()
+    };
 
     if !schnorr.verify_raw_uniform(&author_pk, &challenge) {
         return Err(AppError::forbidden("Invalid signature"));
     }
 
-    let resp = store_metadata(&state, &addr, &metadata, &cbor_bytes).await?;
+    let resp = store_metadata(&state, &addr, &metadata, &cbor_bytes, req.sequence).await?;
     Ok(Json(resp))
 }
 
@@ -190,6 +225,7 @@ async fn store_metadata(
     addr: &PublishedTemplateAddress,
     metadata: &TemplateMetadata,
     cbor_bytes: &[u8],
+    signed_sequence: Option<i64>,
 ) -> Result<SubmitMetadataResponse, AppError> {
     let extra = serde_json::to_value(&metadata.extra)
         .map_err(|e| AppError::internal(format!("Failed to serialize extra metadata: {e}")))?;
@@ -219,6 +255,7 @@ async fn store_metadata(
         schema_version: metadata.schema_version as i32,
         cbor_bytes: cbor_bytes.to_vec(),
         functions: functions.clone(),
+        signed_sequence,
     };
     db::metadata::upsert_metadata(&state.pool, &new_metadata).await?;
 

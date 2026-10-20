@@ -27,6 +27,7 @@ pub struct MetadataRow {
     #[allow(dead_code)]
     pub cbor_bytes: Vec<u8>,
     pub functions_json: String,
+    pub last_signed_sequence: i64,
     #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
     #[allow(dead_code)]
@@ -67,20 +68,22 @@ pub struct NewMetadata {
     pub schema_version: i32,
     pub cbor_bytes: Vec<u8>,
     pub functions: Vec<FunctionDocRow>,
+    pub signed_sequence: Option<i64>,
 }
 
 pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), sqlx::Error> {
     let tags_json = serde_json::to_string(&m.tags).unwrap_or_else(|_| "[]".to_string());
     let functions_json = serde_json::to_string(&m.functions).unwrap_or_else(|_| "[]".to_string());
+    let seq = m.signed_sequence.unwrap_or(0);
     sqlx::query(
         r#"
         INSERT INTO template_metadata (
             template_address, name, version, description, tags, category,
             repository, documentation, homepage, license, logo_url,
             commit_hash, supersedes, extra, schema_version, cbor_bytes,
-            functions_json
+            functions_json, last_signed_sequence
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (template_address) DO UPDATE SET
             name = EXCLUDED.name,
             version = EXCLUDED.version,
@@ -98,6 +101,10 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
             schema_version = EXCLUDED.schema_version,
             cbor_bytes = EXCLUDED.cbor_bytes,
             functions_json = EXCLUDED.functions_json,
+            last_signed_sequence = CASE
+                WHEN EXCLUDED.last_signed_sequence > 0 THEN EXCLUDED.last_signed_sequence
+                ELSE template_metadata.last_signed_sequence
+            END,
             updated_at = datetime('now')
         "#,
     )
@@ -118,6 +125,7 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
     .bind(m.schema_version)
     .bind(&m.cbor_bytes)
     .bind(&functions_json)
+    .bind(seq)
     .execute(pool)
     .await?;
     Ok(())

@@ -25,4 +25,5 @@ sync_interval_secs = 60
 [admin]
 # Initial admin created on first run if no admins exist
 initial_username = "admin"
-initial_password = "change-me"
+# Must be set to a secure password. If omitted, a random secure password will be generated and logged on first startup.
+# initial_password = "replace-with-a-secure-password"

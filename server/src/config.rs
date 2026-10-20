@@ -106,8 +106,8 @@ pub struct IndexerConfig {
 pub struct AdminConfig {
     #[serde(default = "default_admin_username")]
     pub initial_username: String,
-    #[serde(default = "default_admin_password")]
-    pub initial_password: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_password: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -142,7 +142,7 @@ impl Default for AdminConfig {
     fn default() -> Self {
         Self {
             initial_username: default_admin_username(),
-            initial_password: default_admin_password(),
+            initial_password: None,
         }
     }
 }
@@ -271,10 +271,6 @@ fn default_admin_username() -> String {
     "admin".to_string()
 }
 
-fn default_admin_password() -> String {
-    "change-me".to_string()
-}
-
 fn default_base_path() -> String {
     "/".to_string()
 }
@@ -316,4 +312,31 @@ pub enum ConfigError {
     Parse(toml::de::Error),
     #[error("Failed to serialize config: {0}")]
     Serialize(toml::ser::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_admin_config_defaults_to_none_for_password() {
+        let config = Config::default();
+        assert_eq!(config.admin.initial_username, "admin");
+        assert!(config.admin.initial_password.is_none());
+    }
+
+    #[test]
+    fn test_admin_config_parses_custom_password() {
+        let toml_str = r#"
+            [server]
+            [database]
+            [indexer]
+            [admin]
+            initial_username = "superuser"
+            initial_password = "my-secure-password"
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.admin.initial_username, "superuser");
+        assert_eq!(config.admin.initial_password.as_deref(), Some("my-secure-password"));
+    }
 }

@@ -21,7 +21,7 @@ docker compose up -d db
 
 # Configure
 cp config.example.toml config.toml
-# Edit config.toml with your indexer URL and JWT secret
+# Edit config.toml with your indexer URL, JWT secret, and secure admin password (or leave unset to generate one on boot)
 
 # Run the server
 cargo run -p ootle-community-templates -- --config config.toml

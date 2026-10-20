@@ -7,6 +7,7 @@ mod sync;
 use std::sync::Arc;
 
 use clap::Parser;
+use rand::RngCore;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
 use tower_http::{
@@ -58,10 +59,40 @@ async fn main() -> anyhow::Result<()> {
     let admin_count = db::admins::count(&pool).await?;
     if admin_count == 0 {
         tracing::info!("No admins found, creating initial admin user...");
-        let hash = api::auth::hash_password(&config.admin.initial_password)
+
+        // Refuse to seed insecure committed default password ("change-me")
+        let (password, was_generated) = match &config.admin.initial_password {
+            Some(p) if p.trim().is_empty() || p == "change-me" => {
+                anyhow::bail!(
+                    "Insecure or empty admin password configured ('{}'). Please set a secure initial_password in config.toml or leave it unset to generate a random password on first boot.",
+                    p
+                );
+            }
+            Some(p) => (p.clone(), false),
+            None => {
+                // Generate a cryptographically secure random password on first run
+                let mut bytes = [0u8; 16];
+                rand::rng().fill_bytes(&mut bytes);
+                (hex::encode(bytes), true)
+            }
+        };
+
+        let hash = api::auth::hash_password(&password)
             .map_err(|e| anyhow::anyhow!("Failed to hash initial admin password: {:?}", e))?;
         db::admins::create_admin(&pool, &config.admin.initial_username, &hash).await?;
-        tracing::info!("Initial admin '{}' created", config.admin.initial_username);
+
+        if was_generated {
+            tracing::warn!("============================================================");
+            tracing::warn!(
+                "INITIAL ADMIN USER CREATED: '{}'",
+                config.admin.initial_username
+            );
+            tracing::warn!("GENERATED TEMPORARY PASSWORD: '{}'", &password);
+            tracing::warn!("PLEASE SAVE THIS PASSWORD AND CHANGE IT UPON FIRST LOGIN!");
+            tracing::warn!("============================================================");
+        } else {
+            tracing::info!("Initial admin '{}' created", config.admin.initial_username);
+        }
     }
 
     // Resolve the effective indexer URL and JWT secret

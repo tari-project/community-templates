@@ -27,10 +27,17 @@ RUN npm run build
 
 # Stage 3: Final image
 FROM debian:trixie-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r appuser -g 1000 \
+    && useradd -u 1000 -r -g appuser -m -d /app -s /sbin/nologin appuser
+
 WORKDIR /app
 COPY --from=rust-builder /build/target/release/ootle-community-templates ./
 COPY --from=web-builder /build/dist ./static/
 COPY migrations/ migrations/
+
+RUN mkdir -p /app/data && chown -R appuser:appuser /app
+
+USER appuser
 EXPOSE 3000
 CMD ["./ootle-community-templates", "--config", "config.toml"]

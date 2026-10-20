@@ -26,6 +26,8 @@ pub struct LoginResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
+    #[serde(default)]
+    pub ver: i64,
     pub exp: usize,
 }
 
@@ -55,6 +57,7 @@ async fn login(
 
     let claims = Claims {
         sub: admin.username,
+        ver: admin.token_version,
         exp,
     };
 
@@ -90,7 +93,17 @@ pub async fn jwt_middleware(
     )
     .map_err(|_| AppError::unauthorized("Invalid or expired token"))?;
 
+    // Verify admin still exists in the database and token version matches (#27)
+    let admin = db::admins::get_by_username(&state.pool, &token_data.claims.sub)
+        .await?
+        .ok_or_else(|| AppError::unauthorized("Admin account no longer exists or has been deleted"))?;
+
+    if token_data.claims.ver != admin.token_version {
+        return Err(AppError::unauthorized("Token has been revoked or invalidated"));
+    }
+
     req.extensions_mut().insert(token_data.claims);
+    req.extensions_mut().insert(admin);
     Ok(next.run(req).await)
 }
 

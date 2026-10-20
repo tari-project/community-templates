@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct AdminRow {
     pub id: i32,
     pub username: String,
     pub password_hash: String,
+    pub token_version: i64,
     pub created_at: DateTime<Utc>,
 }
 
@@ -57,7 +58,7 @@ pub async fn update_password(
     id: i32,
     password_hash: &str,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query("UPDATE admins SET password_hash = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE admins SET password_hash = ?, token_version = token_version + 1 WHERE id = ?")
         .bind(password_hash)
         .bind(id)
         .execute(pool)

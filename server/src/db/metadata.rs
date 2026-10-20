@@ -134,13 +134,16 @@ pub async fn get_metadata(
 }
 
 /// Returns all categories with their template counts, ordered by frequency.
+/// Excludes templates marked as blacklisted in `template_curation` (#26).
 pub async fn get_categories(pool: &SqlitePool) -> Result<Vec<(String, i64)>, sqlx::Error> {
     let rows: Vec<(String, i64)> = sqlx::query_as(
         r#"
-        SELECT category, COUNT(*) AS cnt
-        FROM template_metadata
-        WHERE category IS NOT NULL AND category != ''
-        GROUP BY category
+        SELECT m.category, COUNT(*) AS cnt
+        FROM template_metadata m
+        LEFT JOIN template_curation c ON m.template_address = c.template_address
+        WHERE m.category IS NOT NULL AND m.category != ''
+          AND COALESCE(c.is_blacklisted, 0) = 0
+        GROUP BY m.category
         ORDER BY cnt DESC
         "#,
     )
@@ -150,6 +153,7 @@ pub async fn get_categories(pool: &SqlitePool) -> Result<Vec<(String, i64)>, sql
 }
 
 /// Returns the most popular tags across all templates, ordered by frequency.
+/// Excludes templates marked as blacklisted in `template_curation` (#26).
 pub async fn get_popular_tags(
     pool: &SqlitePool,
     limit: i64,
@@ -157,7 +161,10 @@ pub async fn get_popular_tags(
     let rows: Vec<(String, i64)> = sqlx::query_as(
         r#"
         SELECT json_each.value AS tag, COUNT(*) AS cnt
-        FROM template_metadata, json_each(template_metadata.tags)
+        FROM template_metadata m
+        LEFT JOIN template_curation c ON m.template_address = c.template_address,
+             json_each(m.tags)
+        WHERE COALESCE(c.is_blacklisted, 0) = 0
         GROUP BY json_each.value
         ORDER BY cnt DESC
         LIMIT ?

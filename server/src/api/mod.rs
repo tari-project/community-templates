@@ -15,6 +15,8 @@ pub struct AppState {
     pub pool: SqlitePool,
     /// Resolved JWT secret bytes (random if not configured, stable for the lifetime of the process).
     pub jwt_secret: Vec<u8>,
+    /// Rate limiter for admin login attempts (#33).
+    pub login_rate_limiter: auth::LoginRateLimiter,
     /// Held by the indexer sync task while a sync pass is in flight, and by the
     /// admin reindex handler while it wipes the database. Guarantees the wipe
     /// can never race a partial write.

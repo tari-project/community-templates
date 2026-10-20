@@ -100,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
     let state = Arc::new(AppState {
         pool,
         jwt_secret,
+        login_rate_limiter: api::auth::LoginRateLimiter::new(),
         sync_lock,
         reindex_notify,
     });
@@ -135,7 +136,11 @@ async fn main() -> anyhow::Result<()> {
     let bind = format!("{}:{}", config.server.bind_address, config.server.port);
     tracing::info!("Starting server on {bind}");
     let listener = tokio::net::TcpListener::bind(&bind).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

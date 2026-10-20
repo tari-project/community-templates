@@ -19,6 +19,16 @@ pub async fn get_by_username(
         .await
 }
 
+pub async fn get_by_id(
+    pool: &SqlitePool,
+    id: i32,
+) -> Result<Option<AdminRow>, sqlx::Error> {
+    sqlx::query_as::<_, AdminRow>("SELECT * FROM admins WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+}
+
 pub async fn create_admin(
     pool: &SqlitePool,
     username: &str,

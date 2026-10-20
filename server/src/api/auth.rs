@@ -41,12 +41,7 @@ async fn login(
         .await?
         .ok_or_else(|| AppError::unauthorized("Invalid credentials"))?;
 
-    let parsed_hash = PasswordHash::new(&admin.password_hash)
-        .map_err(|_| AppError::internal("Invalid stored password hash"))?;
-
-    Argon2::default()
-        .verify_password(req.password.as_bytes(), &parsed_hash)
-        .map_err(|_| AppError::unauthorized("Invalid credentials"))?;
+    verify_password(&req.password, &admin.password_hash)?;
 
     let exp = chrono::Utc::now()
         .checked_add_signed(chrono::Duration::hours(24))
@@ -105,4 +100,13 @@ pub fn hash_password(password: &str) -> Result<String, AppError> {
         .hash_password(password.as_bytes(), &salt)
         .map_err(|e| AppError::internal(format!("Failed to hash password: {e}")))?;
     Ok(hash.to_string())
+}
+
+pub fn verify_password(password: &str, password_hash: &str) -> Result<(), AppError> {
+    let parsed_hash = PasswordHash::new(password_hash)
+        .map_err(|_| AppError::internal("Invalid stored password hash"))?;
+    Argon2::default()
+        .verify_password(password.as_bytes(), &parsed_hash)
+        .map_err(|_| AppError::unauthorized("Invalid credentials"))?;
+    Ok(())
 }

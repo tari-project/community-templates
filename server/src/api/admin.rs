@@ -7,7 +7,7 @@ use crate::{
     error::{parse_template_addr, AppError},
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -170,8 +170,24 @@ async fn create_admin(
 
 async fn delete_admin(
     State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<auth::Claims>,
     Path(id): Path<i32>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // Refuse to delete the last remaining admin
+    let total_admins = db::admins::count(&state.pool).await?;
+    if total_admins <= 1 {
+        return Err(AppError::bad_request("Cannot delete the last remaining admin account"));
+    }
+
+    // Refuse self-deletion via delete_admin endpoint (operator should not accidentally lock themselves out)
+    if let Some(target) = db::admins::get_by_id(&state.pool, id).await? {
+        if target.username == claims.sub {
+            return Err(AppError::bad_request("Cannot delete your own admin account"));
+        }
+    } else {
+        return Err(AppError::not_found("Admin not found"));
+    }
+
     let deleted = db::admins::delete_admin(&state.pool, id).await?;
     if !deleted {
         return Err(AppError::not_found("Admin not found"));
@@ -181,14 +197,41 @@ async fn delete_admin(
 
 #[derive(Debug, Deserialize)]
 pub struct ChangePasswordRequest {
+    pub current_password: Option<String>,
     pub new_password: String,
 }
 
 async fn change_password(
     State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<auth::Claims>,
     Path(id): Path<i32>,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let target = db::admins::get_by_id(&state.pool, id)
+        .await?
+        .ok_or_else(|| AppError::not_found("Admin not found"))?;
+
+    // Self-service password change: require current password confirmation
+    if target.username == claims.sub {
+        let current = req.current_password.as_deref().ok_or_else(|| {
+            AppError::bad_request("Current password confirmation required to change your own password")
+        })?;
+        auth::verify_password(current, &target.password_hash)?;
+    } else {
+        // Changing another admin's password: if an admin wants to reset another admin, require current password of the caller
+        let caller = db::admins::get_by_username(&state.pool, &claims.sub)
+            .await?
+            .ok_or_else(|| AppError::unauthorized("Calling admin not found"))?;
+        let current = req.current_password.as_deref().ok_or_else(|| {
+            AppError::bad_request("Calling admin password confirmation required to reset another admin's password")
+        })?;
+        auth::verify_password(current, &caller.password_hash)?;
+    }
+
+    if req.new_password.trim().is_empty() {
+        return Err(AppError::bad_request("New password cannot be empty"));
+    }
+
     let hash = auth::hash_password(&req.new_password)?;
     let updated = db::admins::update_password(&state.pool, id, &hash).await?;
     if !updated {

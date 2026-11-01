@@ -130,9 +130,12 @@ export interface ReindexResponse {
   deleted_metadata: number;
 }
 
+const ADMIN_AUTH_FLAG = "admin_authenticated";
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, {
     ...options,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
       ...getAuthHeaders(),
@@ -141,6 +144,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!resp.ok) {
     if (resp.status === 401) {
+      sessionStorage.removeItem(ADMIN_AUTH_FLAG);
       localStorage.removeItem("admin_token");
       window.location.href = `${BASE}/admin/login`;
       throw new Error("Session expired");
@@ -157,11 +161,19 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 export function isLoggedIn(): boolean {
-  return !!localStorage.getItem("admin_token");
+  return (
+    sessionStorage.getItem(ADMIN_AUTH_FLAG) === "1" ||
+    !!localStorage.getItem("admin_token")
+  );
 }
 
 export function logout() {
+  sessionStorage.removeItem(ADMIN_AUTH_FLAG);
   localStorage.removeItem("admin_token");
+  void fetch(`${API_BASE}/auth/logout`, {
+    method: "POST",
+    credentials: "same-origin",
+  }).catch(() => {});
 }
 
 export interface TagCount {
@@ -203,11 +215,15 @@ export const api = {
   },
 
   // Auth
-  login: (username: string, password: string) =>
-    request<{ token: string }>("/auth/login", {
+  login: async (username: string, password: string) => {
+    const res = await request<{ token: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    }),
+    });
+    localStorage.removeItem("admin_token");
+    sessionStorage.setItem(ADMIN_AUTH_FLAG, "1");
+    return res;
+  },
 
   // Admin
   admin: {

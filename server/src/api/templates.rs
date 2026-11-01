@@ -48,6 +48,7 @@ pub struct MetadataResponse {
     pub commit_hash: Option<String>,
     pub supersedes: Option<String>,
     pub functions: Vec<db::metadata::FunctionDocRow>,
+    pub verification_method: db::metadata::VerificationMethod,
 }
 
 async fn get_featured(
@@ -94,6 +95,7 @@ fn to_template_response(
     let meta_resp = metadata.map(|m| {
         let tags = m.tags();
         let functions = m.functions();
+        let verification_method = m.verification_method();
         MetadataResponse {
             name: m.name,
             version: m.version,
@@ -108,8 +110,15 @@ fn to_template_response(
             commit_hash: m.commit_hash,
             supersedes: m.supersedes,
             functions,
+            verification_method,
         }
     });
+    // Do not serve a stale on-chain metadata_hash alongside author-signed metadata
+    // that intentionally diverges from it.
+    let metadata_hash = match meta_resp.as_ref().map(|m| m.verification_method) {
+        Some(db::metadata::VerificationMethod::AuthorSignature) => None,
+        _ => t.metadata_hash,
+    };
     TemplateResponse {
         template_address: t.template_address,
         template_name: t.template_name,
@@ -117,7 +126,7 @@ fn to_template_response(
         author_friendly_name: friendly_name,
         binary_hash: t.binary_hash,
         at_epoch: t.at_epoch,
-        metadata_hash: t.metadata_hash,
+        metadata_hash,
         definition: t.definition,
         code_size: t.code_size,
         is_featured: t.is_featured,
@@ -130,6 +139,16 @@ fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -
     let has_metadata = r.meta_name.is_some();
     let meta_tags = r.meta_tags().unwrap_or_default();
     let meta_functions = r.meta_functions();
+    let verification_method = r
+        .meta_verification_method()
+        .unwrap_or(db::metadata::VerificationMethod::OnChainHash);
+    let metadata_hash = if has_metadata
+        && verification_method == db::metadata::VerificationMethod::AuthorSignature
+    {
+        None
+    } else {
+        r.metadata_hash
+    };
     TemplateResponse {
         template_address: r.template_address,
         template_name: r.template_name,
@@ -137,7 +156,7 @@ fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -
         author_friendly_name: friendly_name,
         binary_hash: r.binary_hash,
         at_epoch: r.at_epoch,
-        metadata_hash: r.metadata_hash,
+        metadata_hash,
         definition: None,
         code_size: r.code_size,
         is_featured: r.is_featured,
@@ -156,6 +175,7 @@ fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -
                 commit_hash: r.meta_commit_hash,
                 supersedes: r.meta_supersedes,
                 functions: meta_functions,
+                verification_method,
             })
         } else {
             None

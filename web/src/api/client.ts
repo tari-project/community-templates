@@ -18,6 +18,8 @@ export interface TemplateResponse {
   metadata: MetadataResponse | null;
 }
 
+export type VerificationMethod = "on_chain_hash" | "author_signature";
+
 export interface MetadataResponse {
   name: string;
   version: string;
@@ -32,6 +34,7 @@ export interface MetadataResponse {
   commit_hash: string | null;
   supersedes: string | null;
   functions: FunctionDoc[];
+  verification_method: VerificationMethod;
 }
 
 export interface FunctionDoc {
@@ -91,6 +94,7 @@ export interface SearchResult {
   meta_tags: string[] | null;
   meta_category: string | null;
   meta_logo_url: string | null;
+  meta_verification_method: VerificationMethod | null;
   has_metadata: boolean;
 }
 

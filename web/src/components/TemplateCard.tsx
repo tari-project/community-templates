@@ -23,6 +23,9 @@ export default function TemplateCard({ data }: { data: CardData }) {
   const logoUrl = isSearchResult(data)
     ? data.meta_logo_url
     : data.metadata?.logo_url;
+  const verificationMethod = isSearchResult(data)
+    ? data.meta_verification_method
+    : data.metadata?.verification_method ?? null;
 
   return (
     <Link
@@ -82,6 +85,22 @@ export default function TemplateCard({ data }: { data: CardData }) {
               marginTop: "0.6rem",
             }}
           >
+            {verificationMethod === "on_chain_hash" && (
+              <span
+                className="badge badge--green"
+                title="Metadata CBOR hash matches the on-chain template registration"
+              >
+                On-chain verified
+              </span>
+            )}
+            {verificationMethod === "author_signature" && (
+              <span
+                className="badge badge--muted"
+                title="Metadata signed off-chain by the template author"
+              >
+                Author signed
+              </span>
+            )}
             {category && <span className="badge badge--purple">{category}</span>}
             {tags?.slice(0, 3).map((tag) => (
               <span key={tag} className="badge badge--muted">

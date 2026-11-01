@@ -12,8 +12,7 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     try {
-      const { token } = await api.login(username, password);
-      localStorage.setItem("admin_token", token);
+      await api.login(username, password);
       navigate("/admin");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

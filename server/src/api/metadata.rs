@@ -17,7 +17,10 @@ use tari_ootle_template_metadata::{MetadataHash, TemplateMetadata};
 
 use super::AppState;
 use crate::{
-    db::{self, metadata::FunctionDocRow},
+    db::{
+        self,
+        metadata::{FunctionDocRow, VerificationMethod},
+    },
     error::{parse_template_addr, AppError},
 };
 
@@ -37,6 +40,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub struct SubmitMetadataResponse {
     pub template_address: String,
     pub verified: bool,
+    pub verification_method: VerificationMethod,
     pub metadata: MetadataJson,
 }
 
@@ -55,6 +59,7 @@ pub struct MetadataJson {
     pub commit_hash: Option<String>,
     pub supersedes: Option<String>,
     pub functions: Vec<FunctionDocRow>,
+    pub verification_method: VerificationMethod,
 }
 
 /// Submit metadata verified against the on-chain metadata hash.
@@ -94,7 +99,14 @@ async fn submit_metadata(
         ));
     }
 
-    let resp = store_metadata(&state, &addr, &metadata, &body).await?;
+    let resp = store_metadata(
+        &state,
+        &addr,
+        &metadata,
+        &body,
+        VerificationMethod::OnChainHash,
+    )
+    .await?;
     Ok(Json(resp))
 }
 
@@ -176,7 +188,14 @@ async fn submit_signed_metadata(
         return Err(AppError::forbidden("Invalid signature"));
     }
 
-    let resp = store_metadata(&state, &addr, &metadata, &cbor_bytes).await?;
+    let resp = store_metadata(
+        &state,
+        &addr,
+        &metadata,
+        &cbor_bytes,
+        VerificationMethod::AuthorSignature,
+    )
+    .await?;
     Ok(Json(resp))
 }
 
@@ -190,6 +209,7 @@ async fn store_metadata(
     addr: &PublishedTemplateAddress,
     metadata: &TemplateMetadata,
     cbor_bytes: &[u8],
+    verification_method: VerificationMethod,
 ) -> Result<SubmitMetadataResponse, AppError> {
     let extra = serde_json::to_value(&metadata.extra)
         .map_err(|e| AppError::internal(format!("Failed to serialize extra metadata: {e}")))?;
@@ -219,12 +239,14 @@ async fn store_metadata(
         schema_version: metadata.schema_version as i32,
         cbor_bytes: cbor_bytes.to_vec(),
         functions: functions.clone(),
+        verification_method,
     };
     db::metadata::upsert_metadata(&state.pool, &new_metadata).await?;
 
     Ok(SubmitMetadataResponse {
         template_address: addr.to_string(),
         verified: true,
+        verification_method,
         metadata: MetadataJson {
             name: metadata.name.clone(),
             version: metadata.version.clone(),
@@ -239,6 +261,117 @@ async fn store_metadata(
             commit_hash: metadata.commit_hash.as_ref().map(|h| h.to_string()),
             supersedes: metadata.supersedes.as_ref().map(|a| a.to_string()),
             functions,
+            verification_method,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::templates::{canonical_addr, NewTemplate};
+    use sqlx::sqlite::SqlitePoolOptions;
+    use tokio::sync::{Mutex, Notify};
+
+    #[tokio::test]
+    async fn distinguishes_on_chain_hash_and_author_signature_verification_methods() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect sqlite");
+        sqlx::migrate!("../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+
+        let state = AppState {
+            pool: pool.clone(),
+            jwt_secret: vec![0x42; 32],
+            sync_lock: Arc::new(Mutex::new(())),
+            reindex_notify: Arc::new(Notify::new()),
+        };
+
+        let addr = PublishedTemplateAddress::from_hex(&"11".repeat(32)).expect("valid address");
+        let meta = TemplateMetadata::new("amm_pool".to_string(), "1.0.0".to_string());
+        let cbor_bytes = meta.to_cbor().expect("encode cbor");
+        let on_chain_hash = meta.hash().expect("hash metadata").to_hex();
+
+        db::templates::upsert_template(
+            &pool,
+            &NewTemplate {
+                template_address: addr,
+                template_name: "amm_pool".to_string(),
+                author_public_key: "22".repeat(32),
+                binary_hash: "33".repeat(32),
+                at_epoch: 5,
+                metadata_hash: Some(on_chain_hash.clone()),
+            },
+        )
+        .await
+        .expect("insert template");
+
+        // 1. On-chain hash submission records `on_chain_hash`
+        let resp = store_metadata(
+            &state,
+            &addr,
+            &meta,
+            &cbor_bytes,
+            VerificationMethod::OnChainHash,
+        )
+        .await
+        .expect("store on_chain_hash metadata");
+        assert_eq!(resp.verification_method, VerificationMethod::OnChainHash);
+        assert_eq!(
+            resp.metadata.verification_method,
+            VerificationMethod::OnChainHash
+        );
+
+        let row = db::metadata::get_metadata(&pool, &addr)
+            .await
+            .expect("get metadata")
+            .expect("metadata row exists");
+        assert_eq!(row.verification_method(), VerificationMethod::OnChainHash);
+
+        // 2. Author signature update overwrites verification_method with `author_signature`
+        let mut updated = meta.clone();
+        updated.description = "Updated via author signature".to_string();
+        let updated_cbor = updated.to_cbor().expect("encode updated cbor");
+
+        let resp2 = store_metadata(
+            &state,
+            &addr,
+            &updated,
+            &updated_cbor,
+            VerificationMethod::AuthorSignature,
+        )
+        .await
+        .expect("store author_signature metadata");
+        assert_eq!(
+            resp2.verification_method,
+            VerificationMethod::AuthorSignature
+        );
+        assert_eq!(
+            resp2.metadata.verification_method,
+            VerificationMethod::AuthorSignature
+        );
+
+        let search_rows = db::templates::search_templates(
+            &pool,
+            None,
+            Some(&canonical_addr(&addr)),
+            &[],
+            None,
+            None,
+            10,
+            0,
+        )
+        .await
+        .expect("search templates");
+        assert_eq!(search_rows.len(), 1);
+        assert_eq!(
+            search_rows[0].meta_verification_method(),
+            Some(VerificationMethod::AuthorSignature)
+        );
+    }
 }

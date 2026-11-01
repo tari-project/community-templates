@@ -56,6 +56,7 @@ pub struct SearchResult {
     pub meta_documentation: Option<String>,
     pub meta_homepage: Option<String>,
     pub meta_license: Option<String>,
+    pub meta_verification_method: Option<db::metadata::VerificationMethod>,
 }
 
 async fn get_tags(State(state): State<Arc<AppState>>) -> Result<Json<Vec<TagCount>>, AppError> {
@@ -132,6 +133,19 @@ async fn search(
         .map(|r| {
             let author_friendly_name = r.author_friendly_name().map(str::to_string);
             let meta_tags = r.meta_tags();
+            let has_metadata = r.meta_name.is_some();
+            let meta_verification_method = if has_metadata {
+                Some(
+                    r.meta_verification_method()
+                        .unwrap_or(db::metadata::VerificationMethod::OnChainHash),
+                )
+            } else {
+                None
+            };
+            let metadata_hash = match meta_verification_method {
+                Some(db::metadata::VerificationMethod::AuthorSignature) => None,
+                _ => r.metadata_hash,
+            };
             SearchResult {
                 template_address: r.template_address,
                 template_name: r.template_name,
@@ -139,10 +153,10 @@ async fn search(
                 author_friendly_name,
                 binary_hash: r.binary_hash,
                 at_epoch: r.at_epoch,
-                metadata_hash: r.metadata_hash,
+                metadata_hash,
                 code_size: r.code_size,
                 is_featured: r.is_featured,
-                has_metadata: r.meta_name.is_some(),
+                has_metadata,
                 meta_name: r.meta_name,
                 meta_version: r.meta_version,
                 meta_description: r.meta_description,
@@ -153,6 +167,7 @@ async fn search(
                 meta_documentation: r.meta_documentation,
                 meta_homepage: r.meta_homepage,
                 meta_license: r.meta_license,
+                meta_verification_method,
             }
         })
         .collect();

@@ -27,10 +27,34 @@ pub struct MetadataRow {
     #[allow(dead_code)]
     pub cbor_bytes: Vec<u8>,
     pub functions_json: String,
+    pub verification_method: String,
     #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
     #[allow(dead_code)]
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationMethod {
+    OnChainHash,
+    AuthorSignature,
+}
+
+impl VerificationMethod {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OnChainHash => "on_chain_hash",
+            Self::AuthorSignature => "author_signature",
+        }
+    }
+
+    pub fn from_db_str(s: &str) -> Self {
+        match s {
+            "author_signature" => Self::AuthorSignature,
+            _ => Self::OnChainHash,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -46,6 +70,10 @@ impl MetadataRow {
 
     pub fn functions(&self) -> Vec<FunctionDocRow> {
         serde_json::from_str(&self.functions_json).unwrap_or_default()
+    }
+
+    pub fn verification_method(&self) -> VerificationMethod {
+        VerificationMethod::from_db_str(&self.verification_method)
     }
 }
 
@@ -67,6 +95,7 @@ pub struct NewMetadata {
     pub schema_version: i32,
     pub cbor_bytes: Vec<u8>,
     pub functions: Vec<FunctionDocRow>,
+    pub verification_method: VerificationMethod,
 }
 
 pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), sqlx::Error> {
@@ -78,9 +107,9 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
             template_address, name, version, description, tags, category,
             repository, documentation, homepage, license, logo_url,
             commit_hash, supersedes, extra, schema_version, cbor_bytes,
-            functions_json
+            functions_json, verification_method
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (template_address) DO UPDATE SET
             name = EXCLUDED.name,
             version = EXCLUDED.version,
@@ -98,6 +127,7 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
             schema_version = EXCLUDED.schema_version,
             cbor_bytes = EXCLUDED.cbor_bytes,
             functions_json = EXCLUDED.functions_json,
+            verification_method = EXCLUDED.verification_method,
             updated_at = datetime('now')
         "#,
     )
@@ -118,6 +148,7 @@ pub async fn upsert_metadata(pool: &SqlitePool, m: &NewMetadata) -> Result<(), s
     .bind(m.schema_version)
     .bind(&m.cbor_bytes)
     .bind(&functions_json)
+    .bind(m.verification_method.as_str())
     .execute(pool)
     .await?;
     Ok(())

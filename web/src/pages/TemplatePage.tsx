@@ -70,6 +70,22 @@ export default function TemplatePage() {
             )}
             {meta?.category && <span className="badge badge--purple">{meta.category}</span>}
             {meta?.version && <span className="badge badge--muted">v{meta.version}</span>}
+            {meta?.verification_method === "on_chain_hash" && (
+              <span
+                className="badge badge--green"
+                title="Metadata CBOR hash matches the on-chain template registration"
+              >
+                On-chain verified
+              </span>
+            )}
+            {meta?.verification_method === "author_signature" && (
+              <span
+                className="badge badge--muted"
+                title="Metadata signed off-chain by the template author"
+              >
+                Author signed
+              </span>
+            )}
           </div>
         </div>
       </div>

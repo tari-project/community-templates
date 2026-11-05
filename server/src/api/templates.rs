@@ -47,6 +47,7 @@ pub struct MetadataResponse {
     pub logo_url: Option<String>,
     pub commit_hash: Option<String>,
     pub supersedes: Option<String>,
+    pub verification_method: Option<String>,
     pub functions: Vec<db::metadata::FunctionDocRow>,
 }
 
@@ -107,6 +108,7 @@ fn to_template_response(
             logo_url: m.logo_url,
             commit_hash: m.commit_hash,
             supersedes: m.supersedes,
+            verification_method: Some(m.verification_method),
             functions,
         }
     });
@@ -155,6 +157,7 @@ fn to_template_response_from_joined(r: db::templates::TemplateWithMetadataRow) -
                 logo_url: r.meta_logo_url,
                 commit_hash: r.meta_commit_hash,
                 supersedes: r.meta_supersedes,
+                verification_method: r.meta_verification_method,
                 functions: meta_functions,
             })
         } else {

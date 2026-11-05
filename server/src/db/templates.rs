@@ -136,7 +136,8 @@ pub async fn list_featured_with_metadata(
             m.repository AS meta_repository, m.documentation AS meta_documentation,
             m.homepage AS meta_homepage, m.license AS meta_license,
             m.commit_hash AS meta_commit_hash, m.supersedes AS meta_supersedes,
-            m.extra AS meta_extra, m.functions_json AS meta_functions_json
+            m.extra AS meta_extra, m.functions_json AS meta_functions_json,
+            m.verification_method AS meta_verification_method
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
         INNER JOIN template_curation c ON t.template_address = c.template_address
@@ -173,7 +174,8 @@ pub async fn search_templates(
             m.repository AS meta_repository, m.documentation AS meta_documentation,
             m.homepage AS meta_homepage, m.license AS meta_license,
             m.commit_hash AS meta_commit_hash, m.supersedes AS meta_supersedes,
-            m.extra AS meta_extra, m.functions_json AS meta_functions_json
+            m.extra AS meta_extra, m.functions_json AS meta_functions_json,
+            m.verification_method AS meta_verification_method
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
         LEFT JOIN template_curation c ON t.template_address = c.template_address
@@ -270,6 +272,7 @@ pub struct TemplateWithMetadataRow {
     pub meta_supersedes: Option<String>,
     pub meta_extra: Option<serde_json::Value>,
     pub meta_functions_json: Option<String>,
+    pub meta_verification_method: Option<String>,
 }
 
 impl TemplateWithMetadataRow {
@@ -378,7 +381,8 @@ pub async fn list_all_admin(
             m.repository AS meta_repository, m.documentation AS meta_documentation,
             m.homepage AS meta_homepage, m.license AS meta_license,
             m.commit_hash AS meta_commit_hash, m.supersedes AS meta_supersedes,
-            m.extra AS meta_extra, m.functions_json AS meta_functions_json
+            m.extra AS meta_extra, m.functions_json AS meta_functions_json,
+            m.verification_method AS meta_verification_method
         FROM templates t
         LEFT JOIN template_metadata m ON t.template_address = m.template_address
         LEFT JOIN template_curation c ON t.template_address = c.template_address

@@ -56,6 +56,7 @@ pub struct SearchResult {
     pub meta_documentation: Option<String>,
     pub meta_homepage: Option<String>,
     pub meta_license: Option<String>,
+    pub meta_verification_method: Option<String>,
 }
 
 async fn get_tags(State(state): State<Arc<AppState>>) -> Result<Json<Vec<TagCount>>, AppError> {
@@ -153,6 +154,7 @@ async fn search(
                 meta_documentation: r.meta_documentation,
                 meta_homepage: r.meta_homepage,
                 meta_license: r.meta_license,
+                meta_verification_method: r.meta_verification_method,
             }
         })
         .collect();

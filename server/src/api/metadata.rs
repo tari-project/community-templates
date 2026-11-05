@@ -37,6 +37,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 pub struct SubmitMetadataResponse {
     pub template_address: String,
     pub verified: bool,
+    pub verification_method: String,
     pub metadata: MetadataJson,
 }
 
@@ -94,7 +95,7 @@ async fn submit_metadata(
         ));
     }
 
-    let resp = store_metadata(&state, &addr, &metadata, &body).await?;
+    let resp = store_metadata(&state, &addr, &metadata, &body, "on_chain_hash").await?;
     Ok(Json(resp))
 }
 
@@ -176,7 +177,7 @@ async fn submit_signed_metadata(
         return Err(AppError::forbidden("Invalid signature"));
     }
 
-    let resp = store_metadata(&state, &addr, &metadata, &cbor_bytes).await?;
+    let resp = store_metadata(&state, &addr, &metadata, &cbor_bytes, "author_signature").await?;
     Ok(Json(resp))
 }
 
@@ -190,6 +191,7 @@ async fn store_metadata(
     addr: &PublishedTemplateAddress,
     metadata: &TemplateMetadata,
     cbor_bytes: &[u8],
+    verification_method: &str,
 ) -> Result<SubmitMetadataResponse, AppError> {
     let extra = serde_json::to_value(&metadata.extra)
         .map_err(|e| AppError::internal(format!("Failed to serialize extra metadata: {e}")))?;
@@ -219,12 +221,14 @@ async fn store_metadata(
         schema_version: metadata.schema_version as i32,
         cbor_bytes: cbor_bytes.to_vec(),
         functions: functions.clone(),
+        verification_method: verification_method.to_string(),
     };
     db::metadata::upsert_metadata(&state.pool, &new_metadata).await?;
 
     Ok(SubmitMetadataResponse {
         template_address: addr.to_string(),
         verified: true,
+        verification_method: verification_method.to_string(),
         metadata: MetadataJson {
             name: metadata.name.clone(),
             version: metadata.version.clone(),
@@ -241,4 +245,44 @@ async fn store_metadata(
             functions,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_submit_metadata_response_serialization() {
+        let resp = SubmitMetadataResponse {
+            template_address: "template_123".to_string(),
+            verified: true,
+            verification_method: "on_chain_hash".to_string(),
+            metadata: MetadataJson {
+                name: "test".to_string(),
+                version: "0.1.0".to_string(),
+                description: "".to_string(),
+                tags: vec![],
+                category: None,
+                repository: None,
+                documentation: None,
+                homepage: None,
+                license: None,
+                logo_url: None,
+                commit_hash: None,
+                supersedes: None,
+                functions: vec![],
+            },
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"verification_method\":\"on_chain_hash\""));
+
+        let signed_resp = SubmitMetadataResponse {
+            template_address: "template_123".to_string(),
+            verified: true,
+            verification_method: "author_signature".to_string(),
+            metadata: resp.metadata,
+        };
+        let signed_json = serde_json::to_string(&signed_resp).unwrap();
+        assert!(signed_json.contains("\"verification_method\":\"author_signature\""));
+    }
 }

@@ -6,6 +6,15 @@ mod sync;
 
 use std::sync::Arc;
 
+use axum::{
+    extract::Request,
+    http::header::{
+        HeaderValue, CONTENT_SECURITY_POLICY, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS,
+        X_FRAME_OPTIONS,
+    },
+    middleware::{self, Next},
+    response::Response,
+};
 use clap::Parser;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::str::FromStr;
@@ -130,7 +139,8 @@ async fn main() -> anyhow::Result<()> {
         api_router.fallback_service(serve_dir)
     } else {
         api_router.nest_service(&config.server.base_path, serve_dir)
-    };
+    }
+    .layer(middleware::from_fn(security_headers_middleware));
 
     let bind = format!("{}:{}", config.server.bind_address, config.server.port);
     tracing::info!("Starting server on {bind}");
@@ -138,4 +148,54 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+async fn security_headers_middleware(req: Request, next: Next) -> Response {
+    let mut resp = next.run(req).await;
+    let headers = resp.headers_mut();
+    headers.insert(
+        CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        ),
+    );
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(
+        REFERRER_POLICY,
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    resp
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::Body, routing::get, Router};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_security_headers_middleware() {
+        let app = Router::new()
+            .route("/test", get(|| async { "ok" }))
+            .layer(middleware::from_fn(security_headers_middleware));
+
+        let req = Request::builder().uri("/test").body(Body::empty()).unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+
+        assert_eq!(
+            resp.headers().get(CONTENT_SECURITY_POLICY).unwrap(),
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        );
+        assert_eq!(
+            resp.headers().get(X_CONTENT_TYPE_OPTIONS).unwrap(),
+            "nosniff"
+        );
+        assert_eq!(resp.headers().get(X_FRAME_OPTIONS).unwrap(), "DENY");
+        assert_eq!(
+            resp.headers().get(REFERRER_POLICY).unwrap(),
+            "strict-origin-when-cross-origin"
+        );
+    }
 }
